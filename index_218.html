@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Encuestas de Satisfacción</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --border:#e2e5ea; --text:#1a1d23; --muted:#6b7280;
+  --accent:#3b6fe0; --good:#2fa86e; --warn:#e0a83b; --bad:#d9534f; --tab-bg:#eef0f4;
+}
+[data-theme="dark"]{
+  --bg:#12141a; --panel:#1b1e26; --border:#2a2e38; --text:#e7e9ee; --muted:#9aa1ad;
+  --accent:#6b93ea; --good:#3fbd85; --warn:#e0b34f; --bad:#e56a63; --tab-bg:#20242e;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:18px;margin:0}
+.btn{background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+.toggle{cursor:pointer;border:1px solid var(--border);border-radius:20px;padding:6px 12px;background:var(--tab-bg);font-size:12px}
+.tabs{display:flex;gap:4px;padding:10px 20px 0;background:var(--panel);border-bottom:1px solid var(--border)}
+.tab{padding:10px 16px;cursor:pointer;border-radius:8px 8px 0 0;background:var(--tab-bg);font-size:13px;color:var(--muted)}
+.tab.active{background:var(--bg);color:var(--text);font-weight:600;border:1px solid var(--border);border-bottom:1px solid var(--bg);margin-bottom:-1px}
+main{padding:20px;max-width:1400px;margin:0 auto}
+.section{display:none}
+.section.active{display:block}
+.filters{display:flex;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);padding:12px;border-radius:8px;margin-bottom:16px}
+.filters select,.filters input{padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px}
+.filters label{font-size:11px;color:var(--muted);display:block;margin-bottom:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+.kpi .val{font-size:26px;font-weight:700}
+.kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card h3{margin:0 0 12px;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+.badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge.abierto{background:rgba(217,83,79,.15);color:var(--bad)}
+.badge.proceso{background:rgba(224,168,59,.15);color:var(--warn)}
+.badge.cerrado{background:rgba(47,168,110,.15);color:var(--good)}
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;margin-bottom:10px;font-size:13px;color:var(--muted)}
+.upload-zone input{margin-top:8px}
+.pill{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--tab-bg);color:var(--muted)}
+.status-ok{color:var(--good)}
+.status-pending{color:var(--warn)}
+input[type=file]{color:var(--text);font-size:12px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);align-items:center;justify-content:center;z-index:50}
+.modal{background:var(--panel);border-radius:10px;padding:20px;width:420px;max-width:90vw;border:1px solid var(--border)}
+.modal label{font-size:11px;color:var(--muted);display:block;margin:8px 0 3px}
+.modal input,.modal select,.modal textarea{width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Encuestas de Satisfacción — Maipú Automotores</h1>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="dataStatus" class="pill">Sin datos cargados</span>
+    <button class="btn secondary" onclick="openConfig()">⚙ Config Sheets</button>
+    <div class="toggle" onclick="toggleTheme()">🌓 Modo</div>
+  </div>
+</header>
+
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="carga">Carga de datos</div>
+  <div class="tab" data-tab="stats">1. Estadísticas de gestión</div>
+  <div class="tab" data-tab="tipologias">2. Tipologías / Etapas / Áreas</div>
+  <div class="tab" data-tab="sentimiento">3. Sentimiento</div>
+  <div class="tab" data-tab="reclamos">4. Gestión de reclamos</div>
+</div>
+
+<main>
+
+<!-- CARGA -->
+<section class="section active" id="sec-carga">
+  <div class="grid2">
+    <div class="card">
+      <h3>Base 1 — Reporte 23 (resumen general de encuestas, todas las marcas)</h3>
+      <div class="upload-zone">CSV separado por ";" (Chevrolet / Ford / Audi). Clave: Nro. Orden.<br>
+        <input type="file" id="file1" accept=".csv"></div>
+      <span id="status1" class="status-pending">Pendiente</span>
+    </div>
+    <div class="card">
+      <h3>Base 2 — Detalle Subtipologías (DMS)</h3>
+      <div class="upload-zone">CSV separado por ";". Tipología / Subtipología por orden. Clave: NroOrden.<br>
+        <input type="file" id="file2" accept=".csv"></div>
+      <span id="status2" class="status-pending">Pendiente</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>Base 3 — Encuesta de fábrica (VW)</h3>
+      <div class="upload-zone">XLSX. Solo VW. Clave: Orden de reparación. Indicador general = promedio Q4.<br>
+        <input type="file" id="file3" accept=".xlsx,.xls"></div>
+      <span id="status3" class="status-pending">Pendiente</span>
+    </div>
+    <div class="card">
+      <h3>Resumen de carga</h3>
+      <div id="loadSummary" style="font-size:13px;color:var(--muted)">Subí las 3 bases para habilitar el análisis. Los datos se guardan en este navegador (localStorage) para no tener que resubir cada vez.</div>
+      <button class="btn" style="margin-top:10px" onclick="clearAll()">Borrar datos cargados</button>
+    </div>
+  </div>
+</section>
+
+<!-- FILTROS GLOBALES (compartidos por las 4 secciones de análisis) -->
+<div class="filters" id="globalFilters" style="display:none">
+  <div><label>Desde</label><input type="date" id="fDesde"></div>
+  <div><label>Hasta</label><input type="date" id="fHasta"></div>
+  <div><label>Marca</label><select id="fMarca"><option value="">Todas</option></select></div>
+  <div><label>Taller</label><select id="fTaller"><option value="">Todos</option></select></div>
+  <div><label>Asesor</label><select id="fAsesor"><option value="">Todos</option></select></div>
+  <div style="align-self:flex-end"><button class="btn secondary" onclick="applyFilters()">Aplicar</button></div>
+  <div style="align-self:flex-end"><button class="btn secondary" onclick="resetFilters()">Limpiar</button></div>
+</div>
+
+<!-- 1. ESTADISTICAS -->
+<section class="section" id="sec-stats">
+  <div class="kpis" id="kpis1"></div>
+  <div class="grid2">
+    <div class="card"><h3>Evolución mensual (respondidas vs. total)</h3><canvas id="chartEvol"></canvas></div>
+    <div class="card"><h3>Estado de encuesta</h3><canvas id="chartEstado"></canvas></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Score promedio por Taller</h3><canvas id="chartTaller"></canvas></div>
+    <div class="card"><h3>Score promedio por Asesor (top 15)</h3><canvas id="chartAsesor"></canvas></div>
+  </div>
+</section>
+
+<!-- 2. TIPOLOGIAS -->
+<section class="section" id="sec-tipologias">
+  <div class="kpis" id="kpis2"></div>
+  <div class="grid2">
+    <div class="card"><h3>Por Tipología</h3><canvas id="chartTipo"></canvas></div>
+    <div class="card"><h3>Por Subtipología (top 15)</h3><canvas id="chartSubtipo"></canvas></div>
+  </div>
+  <div class="card"><h3>Detalle</h3><div style="max-height:400px;overflow:auto"><table id="tableTipologias"><thead><tr><th>Orden</th><th>Marca</th><th>Asesor</th><th>Tipología</th><th>Subtipología</th><th>Comentario</th></tr></thead><tbody></tbody></table></div></div>
+</section>
+
+<!-- 3. SENTIMIENTO -->
+<section class="section" id="sec-sentimiento">
+  <div class="card">
+    <h3>Análisis de sentimiento sobre comentarios</h3>
+    <p style="font-size:13px;color:var(--muted)">Todavía no se cargó la clasificación de sentimiento. Se va a procesar con IA sobre los comentarios de las 3 bases (Comentario, Q1_1-Q4_1, Q7_1) y va a quedar disponible acá por período / taller / asesor una vez generada.</p>
+  </div>
+</section>
+
+<!-- 4. RECLAMOS -->
+<section class="section" id="sec-reclamos">
+  <div class="kpis" id="kpis4"></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0">Reclamos (score ≤ 4) — base 1 + base 3</h3>
+      <span id="syncStatus" class="pill">Sheets no configurado</span>
+    </div>
+    <div style="max-height:500px;overflow:auto">
+    <table id="tableReclamos"><thead><tr>
+      <th>Orden</th><th>Fuente</th><th>Marca</th><th>Taller</th><th>Asesor</th><th>Cliente</th><th>Fecha</th><th>Score</th>
+      <th>Derivado a</th><th>Gestión</th><th>Estado</th><th>Cierre</th><th></th>
+    </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Modal gestion reclamo -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 style="margin-top:0">Gestionar reclamo</h3>
+    <input type="hidden" id="mId">
+    <label>Orden</label><input id="mOrden" disabled>
+    <label>Derivado a</label><input id="mDerivadoA" placeholder="Nombre / área">
+    <label>Gestión realizada</label><textarea id="mGestion" rows="3"></textarea>
+    <label>Estado</label>
+    <select id="mEstado"><option value="abierto">Abierto</option><option value="proceso">En proceso</option><option value="cerrado">Cerrado</option></select>
+    <label>Fecha de cierre</label><input type="date" id="mFechaCierre">
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="saveReclamo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal config -->
+<div class="modal-bg" id="configBg">
+  <div class="modal">
+    <h3 style="margin-top:0">Config Google Sheets (persistencia reclamos)</h3>
+    <label>URL de Web App (Apps Script deployment)</label>
+    <input id="cfgUrl" placeholder="https://script.google.com/macros/s/AAAA.../exec">
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeConfig()">Cancelar</button>
+      <button class="btn" onclick="saveConfig()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== THEME ===================== */
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
+  localStorage.setItem('theme', document.documentElement.getAttribute('data-theme'));
+}
+(function(){ const t = localStorage.getItem('theme'); if(t) document.documentElement.setAttribute('data-theme', t); })();
+
+/* ===================== TABS ===================== */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('sec-'+t.dataset.tab).classList.add('active');
+  document.getElementById('globalFilters').style.display = (t.dataset.tab==='carga') ? 'none':'flex';
+  renderAll();
+}));
+
+/* ===================== STATE ===================== */
+let DB = { encuestas: [], tipologias: [], reclamos: [] }; // encuestas = merge base1+base3
+let charts = {};
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem('encsat_db');
+    if(raw) DB = JSON.parse(raw);
+  }catch(e){}
+}
+function saveState(){
+  localStorage.setItem('encsat_db', JSON.stringify(DB));
+  updateStatusPills();
+}
+loadState();
+
+function updateStatusPills(){
+  document.getElementById('status1').textContent = DB.encuestas.some(x=>x.fuente==='base1') ? 'Cargada ('+DB.encuestas.filter(x=>x.fuente==='base1').length+')' : 'Pendiente';
+  document.getElementById('status1').className = DB.encuestas.some(x=>x.fuente==='base1') ? 'status-ok':'status-pending';
+  document.getElementById('status2').textContent = DB.tipologias.length ? 'Cargada ('+DB.tipologias.length+')' : 'Pendiente';
+  document.getElementById('status2').className = DB.tipologias.length ? 'status-ok':'status-pending';
+  document.getElementById('status3').textContent = DB.encuestas.some(x=>x.fuente==='base3') ? 'Cargada ('+DB.encuestas.filter(x=>x.fuente==='base3').length+')' : 'Pendiente';
+  document.getElementById('status3').className = DB.encuestas.some(x=>x.fuente==='base3') ? 'status-ok':'status-pending';
+  const n = DB.encuestas.length;
+  document.getElementById('dataStatus').textContent = n ? n+' encuestas cargadas' : 'Sin datos cargados';
+}
+updateStatusPills();
+
+function clearAll(){
+  if(!confirm('Esto borra los datos cargados en este navegador. ¿Continuar?')) return;
+  DB = { encuestas:[], tipologias:[], reclamos: DB.reclamos };
+  saveState(); location.reload();
+}
+
+/* ===================== HELPERS ===================== */
+function fixEncoding(s){
+  if(!s) return '';
+  // corrige mojibake típico UTF-8 leído como latin-1
+  try{
+    return decodeURIComponent(escape(s));
+  }catch(e){ return s; }
+}
+function parseDateAny(s){
+  if(!s) return null;
+  if(s instanceof Date) return s;
+  const str = String(s).trim();
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(+m[3], +m[2]-1, +m[1], 12,0,0);
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+function monthKey(d){ if(!d) return '—'; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function uid(){ return 'r'+Math.random().toString(36).slice(2,10); }
+
+/* ===================== PARSE CSV (con detección simple de encoding) ===================== */
+function readFileAsText(file, encoding){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = reject;
+    r.readAsText(file, encoding);
+  });
+}
+function parseCSV(text, delim){
+  delim = delim || ';';
+  const lines = text.split(/\r?\n/).filter(l=>l.length);
+  const headers = lines[0].split(delim).map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const cells = line.split(delim);
+    const obj = {};
+    headers.forEach((h,i)=> obj[h] = (cells[i]||'').trim());
+    return obj;
+  });
+}
+
+/* ===================== BASE 1 ===================== */
+document.getElementById('file1').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const text = await readFileAsText(file, 'windows-1252'); // base1 viene en latin-1
+  const rows = parseCSV(text, ';');
+  const parsed = rows.map(r=>{
+    const score = r['Resultado Encuesta'] ? parseInt(r['Resultado Encuesta']) : null;
+    return {
+      fuente:'base1', orden: r['Nro. Orden'], marca: r['Marca'], taller: (r['Taller']||'').trim(),
+      asesor: (r['Asesor']||'').trim(), cliente: r['Cliente'], fecha: parseDateAny(r['Fecha Encuesta'] || r['Fecha Facturacion']),
+      estado: r['Estado Encuesta'], score: isNaN(score)?null:score,
+      nps: r['Resultado Preg. Nps Ford'] || r['Recomendacion Conces.'] || '',
+      comentario: r['Comentario'] || '', tipoOrden: r['Tipo Orden'] || ''
+    };
+  }).filter(r=>r.orden);
+  DB.encuestas = DB.encuestas.filter(x=>x.fuente!=='base1').concat(parsed);
+  saveState(); renderAll();
+});
+
+/* ===================== BASE 2 (tipologías) ===================== */
+document.getElementById('file2').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const text = await readFileAsText(file, 'utf-8');
+  const rows = parseCSV(text, ';');
+  const parsed = rows.map(r=>({
+    orden: r['NroOrden'], marca: r['Marca'], fecha: parseDateAny(r['FechaFacturacion']),
+    scoreSatisfaccion: r['RespSatisfaccion'] ? parseInt(r['RespSatisfaccion']) : null,
+    nps: r['RespNps'] || '', tipologia: (r['Tipologia']||'').trim(), subtipologia: (r['SubTipologia']||'').trim(),
+    comentario: r['Comentario'] || '', cliente: r['Cliente'] || '', asesor: (r['Asesor']||'').trim(),
+    canal: r['CanalRespEnc'] || ''
+  })).filter(r=>r.orden);
+  DB.tipologias = parsed;
+  saveState(); renderAll();
+});
+
+/* ===================== BASE 3 (fábrica VW xlsx) ===================== */
+document.getElementById('file3').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+  const parsed = rows.map(r=>{
+    const q4 = r['Q4'] ? parseFloat(r['Q4']) : null;
+    return {
+      fuente:'base3', orden: String(r['Orden de reparación']||'').trim(), marca:'VOLKSWAGEN',
+      taller: r['Nombre del taller']||'', asesor: (r['Apellido y nombre del asesor']||'').trim(),
+      cliente: (r['Nombre']||'')+' '+(r['Apellido']||''), fecha: parseDateAny(r['Fecha de Servicio']),
+      estado:'COMPLETADA', score: isNaN(q4)?null:q4,
+      nps: r['C1_1'] || '', comentario: [r['Q1_1'],r['Q2_1'],r['Q3_1'],r['Q4_1'],r['Q4_2'],r['Q7_1']].filter(Boolean).join(' | '),
+      q1: r['Q1'], q2: r['Q2'], q3: r['Q3'], q4: q4, q6_lavado: r['Q6']
+    };
+  }).filter(r=>r.orden);
+  DB.encuestas = DB.encuestas.filter(x=>x.fuente!=='base3').concat(parsed);
+  saveState(); renderAll();
+});
+
+/* ===================== FILTROS GLOBALES ===================== */
+let FILTER = { desde:null, hasta:null, marca:'', taller:'', asesor:'' };
+function rebuildFilterOptions(){
+  const marcas = [...new Set(DB.encuestas.map(x=>x.marca).filter(Boolean))].sort();
+  const talleres = [...new Set(DB.encuestas.map(x=>x.taller).filter(Boolean))].sort();
+  const asesores = [...new Set(DB.encuestas.map(x=>x.asesor).filter(Boolean))].sort();
+  fillSelect('fMarca', marcas); fillSelect('fTaller', talleres); fillSelect('fAsesor', asesores);
+}
+function fillSelect(id, values){
+  const sel = document.getElementById(id); const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos</option>' + values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  sel.value = cur;
+}
+function applyFilters(){
+  FILTER.desde = document.getElementById('fDesde').value ? new Date(document.getElementById('fDesde').value) : null;
+  FILTER.hasta = document.getElementById('fHasta').value ? new Date(document.getElementById('fHasta').value) : null;
+  FILTER.marca = document.getElementById('fMarca').value;
+  FILTER.taller = document.getElementById('fTaller').value;
+  FILTER.asesor = document.getElementById('fAsesor').value;
+  renderAll();
+}
+function resetFilters(){
+  document.getElementById('fDesde').value=''; document.getElementById('fHasta').value='';
+  document.getElementById('fMarca').value=''; document.getElementById('fTaller').value=''; document.getElementById('fAsesor').value='';
+  FILTER = {desde:null,hasta:null,marca:'',taller:'',asesor:''};
+  renderAll();
+}
+function matchFilter(rec){
+  if(FILTER.desde && (!rec.fecha || rec.fecha < FILTER.desde)) return false;
+  if(FILTER.hasta && (!rec.fecha || rec.fecha > FILTER.hasta)) return false;
+  if(FILTER.marca && rec.marca !== FILTER.marca) return false;
+  if(FILTER.taller && rec.taller !== FILTER.taller) return false;
+  if(FILTER.asesor && rec.asesor !== FILTER.asesor) return false;
+  return true;
+}
+
+/* ===================== RENDER: SECCION 1 ===================== */
+function renderStats(){
+  const data = DB.encuestas.filter(matchFilter);
+  const total = data.length;
+  const completadas = data.filter(x=>x.estado==='COMPLETADA').length;
+  const tasaResp = total ? (completadas/total*100).toFixed(1)+'%' : '—';
+  const scores = data.map(x=>x.score).filter(x=>x!=null && !isNaN(x));
+  const promedio = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2) : '—';
+  document.getElementById('kpis1').innerHTML = kpiHtml([
+    ['Encuestas totales', total], ['Completadas', completadas], ['Tasa de respuesta', tasaResp], ['Score promedio', promedio]
+  ]);
+
+  const byMonth = {};
+  data.forEach(x=>{ const k = monthKey(x.fecha); byMonth[k] = byMonth[k]||{total:0,resp:0}; byMonth[k].total++; if(x.estado==='COMPLETADA') byMonth[k].resp++; });
+  const months = Object.keys(byMonth).sort();
+  chart('chartEvol','line', months, [
+    {label:'Total', data: months.map(m=>byMonth[m].total), borderColor:'#3b6fe0'},
+    {label:'Respondidas', data: months.map(m=>byMonth[m].resp), borderColor:'#2fa86e'}
+  ]);
+
+  const byEstado = {};
+  data.forEach(x=>{ byEstado[x.estado||'—'] = (byEstado[x.estado||'—']||0)+1; });
+  chart('chartEstado','doughnut', Object.keys(byEstado), [{data:Object.values(byEstado), backgroundColor:palette(Object.keys(byEstado).length)}]);
+
+  const byTaller = groupAvgScore(data,'taller');
+  chart('chartTaller','bar', byTaller.map(x=>x[0]), [{label:'Score promedio', data:byTaller.map(x=>x[1]), backgroundColor:'#3b6fe0'}]);
+
+  const byAsesor = groupAvgScore(data,'asesor').slice(0,15);
+  chart('chartAsesor','bar', byAsesor.map(x=>x[0]), [{label:'Score promedio', data:byAsesor.map(x=>x[1]), backgroundColor:'#6b93ea'}]);
+}
+function groupAvgScore(data, field){
+  const g = {};
+  data.forEach(x=>{ if(x.score==null||isNaN(x.score)) return; const k=x[field]||'—'; g[k]=g[k]||[]; g[k].push(x.score); });
+  return Object.entries(g).map(([k,v])=>[k, (v.reduce((a,b)=>a+b,0)/v.length)]).sort((a,b)=>b[1]-a[1]);
+}
+function kpiHtml(pairs){
+  return pairs.map(([lbl,val])=>`<div class="kpi"><div class="val">${val}</div><div class="lbl">${lbl}</div></div>`).join('');
+}
+function palette(n){
+  const base=['#3b6fe0','#2fa86e','#e0a83b','#d9534f','#6b93ea','#9a6fe0','#4bb3c9','#e07ba0'];
+  return Array.from({length:n},(_,i)=>base[i%base.length]);
+}
+function chart(id, type, labels, datasets){
+  const ctx = document.getElementById(id); if(!ctx) return;
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, { type, data:{labels,datasets}, options:{responsive:true, plugins:{legend:{labels:{color:getComputedStyle(document.body).color}}}, scales: type==='doughnut'?{}:{ x:{ticks:{color:getComputedStyle(document.body).color}}, y:{ticks:{color:getComputedStyle(document.body).color}} } } });
+}
+
+/* ===================== RENDER: SECCION 2 (tipologías) ===================== */
+function renderTipologias(){
+  const data = DB.tipologias.filter(matchFilter);
+  const totalCasos = new Set(data.map(x=>x.orden)).size;
+  const sinReclamo = data.filter(x=>x.tipologia==='Cliente sin Reclamo').length;
+  document.getElementById('kpis2').innerHTML = kpiHtml([
+    ['Filas cargadas', data.length], ['Órdenes únicas', totalCasos], ['Sin reclamo', sinReclamo], ['Con reclamo', data.length-sinReclamo]
+  ]);
+  const byTipo = {}; data.forEach(x=>{ if(x.tipologia==='Cliente sin Reclamo') return; byTipo[x.tipologia]=(byTipo[x.tipologia]||0)+1; });
+  const tipoSorted = Object.entries(byTipo).sort((a,b)=>b[1]-a[1]);
+  chart('chartTipo','bar', tipoSorted.map(x=>x[0]), [{label:'Casos', data:tipoSorted.map(x=>x[1]), backgroundColor:'#3b6fe0'}]);
+
+  const bySub = {}; data.forEach(x=>{ if(!x.subtipologia) return; bySub[x.subtipologia]=(bySub[x.subtipologia]||0)+1; });
+  const subSorted = Object.entries(bySub).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  chart('chartSubtipo','bar', subSorted.map(x=>x[0]), [{label:'Casos', data:subSorted.map(x=>x[1]), backgroundColor:'#e0a83b'}]);
+
+  const tbody = document.querySelector('#tableTipologias tbody');
+  tbody.innerHTML = data.slice(0,300).map(x=>`<tr><td>${x.orden}</td><td>${x.marca}</td><td>${x.asesor}</td><td>${x.tipologia}</td><td>${x.subtipologia}</td><td>${(x.comentario||'').slice(0,80)}</td></tr>`).join('');
+}
+
+/* ===================== RENDER: SECCION 4 (reclamos) ===================== */
+function candidatosReclamo(){
+  return DB.encuestas.filter(x=>x.score!=null && !isNaN(x.score) && x.score<=4).filter(matchFilter);
+}
+function renderReclamos(){
+  const cands = candidatosReclamo();
+  const gestionados = DB.reclamos;
+  const abiertos = gestionados.filter(r=>r.estado==='abierto'||!r.estado).length;
+  const proceso = gestionados.filter(r=>r.estado==='proceso').length;
+  const cerrados = gestionados.filter(r=>r.estado==='cerrado').length;
+  document.getElementById('kpis4').innerHTML = kpiHtml([
+    ['Candidatos (score ≤4)', cands.length], ['En gestión', gestionados.length], ['Abiertos', abiertos], ['En proceso', proceso], ['Cerrados', cerrados]
+  ]);
+  const tbody = document.querySelector('#tableReclamos tbody');
+  tbody.innerHTML = cands.map(c=>{
+    const g = gestionados.find(r=>r.orden===c.orden && r.fuente===c.fuente) || {};
+    const estadoBadge = g.estado ? `<span class="badge ${g.estado}">${g.estado}</span>` : '<span class="badge abierto">sin gestionar</span>';
+    return `<tr>
+      <td>${c.orden}</td><td>${c.fuente}</td><td>${c.marca||''}</td><td>${c.taller||''}</td><td>${c.asesor||''}</td>
+      <td>${c.cliente||''}</td><td>${c.fecha?c.fecha.toLocaleDateString('es-AR'):''}</td><td>${c.score}</td>
+      <td>${g.derivadoA||''}</td><td>${(g.gestionRealizada||'').slice(0,40)}</td><td>${estadoBadge}</td><td>${g.fechaCierre||''}</td>
+      <td><button class="btn secondary" onclick="openReclamo('${c.orden}','${c.fuente}')">Gestionar</button></td>
+    </tr>`;
+  }).join('');
+}
+function openReclamo(orden, fuente){
+  const c = DB.encuestas.find(x=>x.orden===orden && x.fuente===fuente);
+  let g = DB.reclamos.find(r=>r.orden===orden && r.fuente===fuente);
+  document.getElementById('mId').value = g ? g.id : uid();
+  document.getElementById('mOrden').value = orden + ' ('+fuente+')';
+  document.getElementById('mDerivadoA').value = g ? g.derivadoA||'' : '';
+  document.getElementById('mGestion').value = g ? g.gestionRealizada||'' : '';
+  document.getElementById('mEstado').value = g ? g.estado||'abierto' : 'abierto';
+  document.getElementById('mFechaCierre').value = g ? g.fechaCierre||'' : '';
+  document.getElementById('modalBg').style.display='flex';
+  document.getElementById('modalBg').dataset.orden = orden;
+  document.getElementById('modalBg').dataset.fuente = fuente;
+}
+function closeModal(){ document.getElementById('modalBg').style.display='none'; }
+function saveReclamo(){
+  const orden = document.getElementById('modalBg').dataset.orden;
+  const fuente = document.getElementById('modalBg').dataset.fuente;
+  const c = DB.encuestas.find(x=>x.orden===orden && x.fuente===fuente);
+  const rec = {
+    id: document.getElementById('mId').value, orden, fuente, marca:c?.marca||'', taller:c?.taller||'', asesor:c?.asesor||'',
+    cliente:c?.cliente||'', fechaEncuesta: c?.fecha?c.fecha.toISOString().slice(0,10):'', score:c?.score,
+    tipologia:'', subtipologia:'', comentario:c?.comentario||'',
+    derivadoA: document.getElementById('mDerivadoA').value, gestionRealizada: document.getElementById('mGestion').value,
+    estado: document.getElementById('mEstado').value, fechaCierre: document.getElementById('mFechaCierre').value,
+    creadoPor:'analista'
+  };
+  DB.reclamos = DB.reclamos.filter(r=>r.id!==rec.id).concat(rec);
+  saveState(); closeModal(); renderReclamos();
+  syncReclamo(rec);
+}
+
+/* ===================== SYNC GOOGLE SHEETS (Apps Script) ===================== */
+function getCfgUrl(){ return localStorage.getItem('encsat_gasurl') || ''; }
+function openConfig(){ document.getElementById('cfgUrl').value = getCfgUrl(); document.getElementById('configBg').style.display='flex'; }
+function closeConfig(){ document.getElementById('configBg').style.display='none'; }
+function saveConfig(){
+  localStorage.setItem('encsat_gasurl', document.getElementById('cfgUrl').value.trim());
+  closeConfig(); updateSyncStatus(); loadFromSheets();
+}
+function updateSyncStatus(){
+  document.getElementById('syncStatus').textContent = getCfgUrl() ? 'Sheets conectado' : 'Sheets no configurado';
+}
+function syncReclamo(rec){
+  const url = getCfgUrl(); if(!url) return;
+  fetch(url, { method:'POST', body: JSON.stringify({action:'upsert', record:rec}) }).catch(()=>{});
+}
+function loadFromSheets(){
+  const url = getCfgUrl(); if(!url) return;
+  const cbName = 'cb_'+Date.now();
+  window[cbName] = (res)=>{
+    if(res.ok){
+      DB.reclamos = res.data.map(r=>({...r, score: r.score!==''?Number(r.score):null}));
+      saveState(); renderAll();
+    }
+    delete window[cbName];
+    document.getElementById(cbName+'_s').remove();
+  };
+  const s = document.createElement('script'); s.id = cbName+'_s'; s.src = url+'?callback='+cbName;
+  document.body.appendChild(s);
+}
+updateSyncStatus();
+
+/* ===================== RENDER ALL ===================== */
+function renderAll(){
+  rebuildFilterOptions();
+  renderStats();
+  renderTipologias();
+  renderReclamos();
+}
+renderAll();
+</script>
+</body>
+</html>
