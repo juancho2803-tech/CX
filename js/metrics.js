@@ -40,10 +40,27 @@ function lvsOf(rows) {
 function surveyMetrics(rows) {
     const generadas = rows.length;
     const completadas = rows.filter(r => (r.estado || '').toUpperCase() === 'COMPLETADA').length;
-    const reclamos = rows.filter(r => r.csat != null && r.csat !== 5).length;
+    const sinContacto = rows.filter(r => (r.estado || '').toUpperCase() === 'SIN CONTACTO').length;
+    // Reclamo = encuesta completada con puntaje distinto de 5 (así el número está dentro de las completadas)
+    const reclamos = rows.filter(r => (r.estado || '').trim().toUpperCase() === 'COMPLETADA' && r.csat != null && r.csat !== 5).length;
     return {
-        generadas, completadas, reclamos,
+        generadas, completadas, sinContacto, reclamos,
         pctCompletadas: generadas ? completadas / generadas * 100 : 0,
+        pctSinContacto: generadas ? sinContacto / generadas * 100 : 0,
         pctReclamos: completadas ? reclamos / completadas * 100 : 0
     };
+}
+
+// Estado de encuesta normalizado (mayúsculas, sin espacios extra)
+function normEstado(estado) {
+    return String(estado || '').trim().toUpperCase() || '(SIN ESTADO)';
+}
+
+// Cantidad y % (sobre generadas) de cada estado de encuesta, de mayor a menor
+function estadosEncuesta(rows) {
+    const cant = {};
+    rows.forEach(r => { const e = normEstado(r.estado); cant[e] = (cant[e] || 0) + 1; });
+    return Object.entries(cant)
+        .map(([estado, n]) => ({ estado, n, pct: rows.length ? n / rows.length * 100 : 0 }))
+        .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado));
 }

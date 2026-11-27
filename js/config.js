@@ -77,7 +77,9 @@ const GRUPOS_RECLAMO = [
     { name: 'Pagos', hue: 95, tipos: ['Medios de pago'] }
 ];
 
-const RECLAMO_EXCLUIR = ['Cliente sin Reclamo'];
+// Filas del detalle que no son un motivo de reclamo: "Cliente sin Reclamo" y, en Ventas, las filas que el
+// analista dejó sin tipología ("Sin tipificar"). No cuentan en rankings ni etapas.
+const RECLAMO_EXCLUIR = ['Cliente sin Reclamo', 'Sin tipificar'];
 
 const _grupoLookup = (() => {
     const m = {};
@@ -86,6 +88,19 @@ const _grupoLookup = (() => {
 })();
 
 const _grupoHue = (() => { const m = {}; GRUPOS_RECLAMO.forEach(g => m[g.name] = g.hue); m['Otros'] = null; return m; })();
+// En Ventas, el grupo de una tipología es su etapa (ver VB_ETAPAS_VENTAS en verbatims.js)
+Object.assign(_grupoHue, { 'Plazos y turno de entrega': 210, 'Estado de la unidad': 0, 'Información al cliente': 30,
+    'Atención comercial': 162, 'Precio, pagos y créditos': 45, 'Trámites y patentamiento': 280, 'Otras': null });
+// Nombres de los grupos del área, en orden (el último es el de las tipologías sin grupo)
+function gruposArea() {
+    return areaActual === 'ventas'
+        ? [...VB_ETAPAS_VENTAS.map(e => e.etapa), 'Otras']
+        : [...GRUPOS_RECLAMO.map(g => g.name), 'Otros'];
+}
+// Grupo de una tipología según el área
+function grupoDe(tip) {
+    return areaActual === 'ventas' ? vbEtapa(tip) : (_grupoLookup[normTip(tip)] || 'Otros');
+}
 
 /* ─────────────── Cruce Encuestas (Reporte) vs Reclamos (Detalle) ─────────────── */
 const MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];

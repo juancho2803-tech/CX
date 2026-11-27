@@ -11,6 +11,8 @@ function showMessage(msg, type = 'success') {
 
 function parseDate(ds) {
     if (!ds) return null;
+    // Excel: la fecha ya viene como Date (se lee con cellDates); se toma el día calendario
+    if (ds instanceof Date) return isNaN(ds) ? null : new Date(ds.getFullYear(), ds.getMonth(), ds.getDate());
     ds = String(ds).trim();
     const fmts = [
         { rx: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, g: [1, 2, 3] },
@@ -21,6 +23,7 @@ function parseDate(ds) {
         const m = ds.match(f.rx);
         if (m) {
             const [d, mo, y] = f.g.map(i => parseInt(m[i]));
+            if (!d || !mo || !y) return null;   // p. ej. 00/00/0000 = sin fecha
             return new Date(y, mo - 1, d);
         }
     }
@@ -100,3 +103,26 @@ function grupoColor(g) {
 }
 
 const lcFirst = s => s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+
+// Escapa texto para insertarlo en HTML (contenido y atributos). Usar siempre con datos de los CSV.
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// "SIN CONTACTO" → "Sin contacto"
+// Nombre de persona normalizado: mayúsculas y un solo espacio entre palabras
+// Arregla textos con acentos mal codificados (UTF-8 leído como Latin-1): "informaciÃ³n" → "información"
+function arreglarTexto(s) {
+    s = String(s == null ? '' : s);
+    if (!/[ÃÂ][\u0080-\u00BF]/.test(s)) return s;
+    try { return decodeURIComponent(escape(s)); } catch (e) { return s; }
+}
+
+function nombrePersona(s) {
+    return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function capitalizar(s) {
+    const t = String(s || '').toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+}

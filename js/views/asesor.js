@@ -7,7 +7,7 @@ function renderAsesor() {
     if (!chartEl) return;
     const excl = new Set(RECLAMO_EXCLUIR.map(normTip));
     const asesor = document.getElementById('asesorSelect')?.value || '';
-    const groupOrder = [...GRUPOS_RECLAMO.map(g => g.name), 'Otros'];
+    const groupOrder = gruposArea();
     const wrap = chartEl.parentElement;
 
     if (!asesor) {
@@ -16,7 +16,7 @@ function renderAsesor() {
         filteredData.forEach(d => {
             if (excl.has(normTip(d.tipologia))) return;
             const a = d.asesor || '(sin asesor)';
-            const g = _grupoLookup[normTip(d.tipologia)] || 'Otros';
+            const g = grupoDe(d.tipologia);
             (perAses[a] = perAses[a] || {});
             perAses[a][g] = (perAses[a][g] || 0) + 1;
         });
@@ -32,17 +32,20 @@ function renderAsesor() {
         }));
 
         wrap.style.height = Math.max(340, names.length * 24 + 90) + 'px';
-        document.getElementById('asesorChartTitle').textContent = 'Ranking de asesores por reclamos (apilado por grupo)';
-        document.getElementById('asesorTableTitle').textContent = 'Tabla Asesor × Grupo';
+        document.getElementById('asesorChartTitle').textContent = `Ranking de ${term().asesores} por reclamos (apilado por ${areaActual === 'ventas' ? 'etapa' : 'grupo'})`;
+        document.getElementById('asesorTableTitle').textContent = `Tabla ${term().Asesor} × ${areaActual === 'ventas' ? 'Etapa' : 'Grupo'}`;
         if (charts.cAse) charts.cAse.destroy();
         charts.cAse = new Chart(chartEl, {
             type: 'bar', data: { labels, datasets },
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                // En barras horizontales el modo "index" tiene que buscar por el eje Y: si no, muestra la fila de otro asesor
+                interaction: { mode: 'index', axis: 'y', intersect: false },
+                ...clicEnGrafico((i, ds, chart) => abrirDetalle({ t: 'r', f: { asesor: asesorFiltro(names[i]), grupo: chart.data.datasets[ds].label }, titulo: `${names[i]} · ${chart.data.datasets[ds].label}` })),
                 scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true, ticks: { font: { size: 10 } } } },
                 plugins: {
                     legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
-                    tooltip: { mode: 'index', intersect: false, filter: it => it.parsed.x > 0 }
+                    tooltip: { filter: it => it.parsed.x > 0, callbacks: { title: items => items.length ? names[items[0].dataIndex] : '' } }
                 }
             }
         });
@@ -52,8 +55,8 @@ function renderAsesor() {
         const base = filteredData.filter(d => (d.asesor || '(sin asesor)') === asesor && !excl.has(normTip(d.tipologia)));
         const seg = {};
         base.forEach(d => {
-            const g = _grupoLookup[normTip(d.tipologia)] || 'Otros';
-            const sub = (d.subtipologia && d.subtipologia.trim()) ? d.subtipologia.trim() : '(sin subtipología)';
+            const g = grupoDe(d.tipologia);
+            const sub = nombreSub(d);
             (seg[g] = seg[g] || {});
             seg[g][sub] = (seg[g][sub] || 0) + 1;
         });
@@ -80,6 +83,7 @@ function renderAsesor() {
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', axis: 'y', intersect: false },
+                ...clicEnGrafico((i, ds, chart) => abrirDetalle({ t: 'r', f: { asesor: asesorFiltro(asesor), grupo: order[i], sub: chart.data.datasets[ds].label }, titulo: `${asesor} · ${chart.data.datasets[ds].label}` })),
                 scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true } },
                 plugins: {
                     legend: { display: false },
@@ -90,6 +94,78 @@ function renderAsesor() {
         renderAsesorTableSingle(asesor, groupOrder);
     }
     renderAsesorClouds();
+    renderTasaPersonas();
+}
+
+// Asesor de una fila del ranking → valor para filtrar ("(sin asesor)" = vacío)
+const asesorFiltro = a => a === '(sin asesor)' ? '' : a;
+
+// ── Tasa de respuesta y NPS por asesor (encuestas) y por técnico (pasos por taller, cruzando por orden) ──
+function indicadoresEncuestas(filas) {
+    const sm = surveyMetrics(filas), np = npsOf(filas), lv = lvsOf(filas);
+    const respondidas = filas.filter(r => r.csat != null || npsCategory(r.recomiendaRaw)).length;
+    return { generadas: sm.generadas, completadas: sm.completadas, respondidas, sinContacto: sm.sinContacto,
+        tasa: sm.generadas ? respondidas / sm.generadas * 100 : null, nps: np.nps, nNps: np.total, lvs: lv.lvs,
+        pctReclamos: sm.completadas ? sm.pctReclamos : null };
+}
+
+function filaPersona(nombre, x, extra = '', spec = null) {
+    const c = (v, bueno, medio) => v == null ? 'var(--text-secondary)' : v >= bueno ? 'var(--success)' : v >= medio ? 'var(--warning)' : 'var(--danger)';
+    return `<tr ${spec ? attrDetalle(spec) : ''}><td><strong>${escHtml(nombre)}</strong></td>${extra}
+        <td class="num">${fmt(x.generadas)}</td><td class="num">${fmt(x.respondidas)}</td>
+        <td class="num"><strong style="color:${c(x.tasa, 50, 35)};">${x.tasa == null ? '—' : Math.round(x.tasa) + '%'}</strong></td>
+        <td class="num">${fmt(x.sinContacto)}</td>
+        <td class="num"><strong style="color:${colorNps(x.nps)};">${x.nps == null ? '—' : x.nps}</strong> <span class="vb-pct">(${fmt(x.nNps)})</span></td>
+        <td class="num" style="color:${colorLvs(x.lvs)};">${x.lvs == null ? '—' : x.lvs.toFixed(2)}</td>
+        <td class="num">${x.pctReclamos == null ? '—' : Math.round(x.pctReclamos) + '%'}</td></tr>`;
+}
+const ENC_PERSONA_COLS = '<th class="num">Encuestas generadas</th><th class="num">Respondidas</th><th class="num">Tasa de respuesta</th><th class="num">Sin contacto</th><th class="num">NPS <span class="vb-pct">(resp.)</span></th><th class="num">LVS</th><th class="num">% Reclamos</th>';
+
+function renderTasaPersonas() {
+    const contA = document.getElementById('tasaAsesores');
+    const contT = document.getElementById('tasaTecnicos');
+    if (!contA || !contT) return;
+    const enc = surveyData.length ? filteredSurvey() : [];
+    if (!enc.length) {
+        contA.innerHTML = '<p class="no-data">Cargá el reporte de encuestas para ver la tasa de respuesta y el NPS.</p>';
+        contT.innerHTML = '<p class="no-data">Cargá el reporte de encuestas y la base de pasos por taller (trae los técnicos de cada orden).</p>';
+        return;
+    }
+    // Asesores
+    const porAsesor = {};
+    enc.forEach(r => { const a = r.asesor || '(sin asesor)'; (porAsesor[a] = porAsesor[a] || []).push(r); });
+    const asesores = Object.entries(porAsesor).map(([a, f]) => [a, indicadoresEncuestas(f)]).sort((x, y) => y[1].generadas - x[1].generadas);
+    contA.innerHTML = `<table class="cruce-table"><thead><tr><th>${term().Asesor}</th>${ENC_PERSONA_COLS}</tr></thead>
+        <tbody>${asesores.map(([a, x]) => filaPersona(a, x, '', { t: 'e', f: { asesor: asesorFiltro(a) }, titulo: `Encuestas de ${a}` })).join('')}</tbody></table>`;
+
+    // Técnicos: órdenes de la base de pasos (sin anuladas ni internas) con su encuesta
+    if (!pasosData.length) {
+        contT.innerHTML = '<p class="no-data">Cargá la base de pasos por taller: trae los técnicos que trabajaron cada orden.</p>';
+        return;
+    }
+    const encPorOrden = {};
+    // Una orden puede tener más de una encuesta: se cuentan todas
+    enc.forEach(r => { const k = String(r.orden || '').replace(/^0+/, ''); if (k) (encPorOrden[k] = encPorOrden[k] || []).push(r); });
+    const marcas = seleccionados('marcaFilter').map(m => m.toUpperCase());
+    const df = document.getElementById('dateFrom').value, dt = document.getElementById('dateTo').value;
+    const porTec = {};
+    pasosData.forEach(o => {
+        if (/anulad/i.test(o.estadoOrden) || /^interna/i.test(o.tipoOrden)) return;
+        if (marcas.length && !marcas.includes(o.marca.toUpperCase())) return;
+        if (df && o.fecha < new Date(df)) return;
+        if (dt && o.fecha > new Date(dt)) return;
+        const e = encPorOrden[o.orden];
+        (o.tecnicos && o.tecnicos.length ? o.tecnicos : ['(sin técnico)']).forEach(t => {
+            const x = porTec[t] = porTec[t] || { ordenes: 0, horas: 0, enc: [] };
+            x.ordenes++;
+            x.horas += o.horasFacturadas || 0;
+            if (e) x.enc.push(...e);
+        });
+    });
+    const tecnicos = Object.entries(porTec).map(([t, x]) => [t, x, indicadoresEncuestas(x.enc)]).sort((a, b) => b[1].ordenes - a[1].ordenes);
+    contT.innerHTML = tecnicos.length ? `<table class="cruce-table"><thead><tr><th>Técnico</th><th class="num">Órdenes</th><th class="num">Horas facturadas</th>${ENC_PERSONA_COLS}</tr></thead>
+        <tbody>${tecnicos.map(([t, x, i]) => filaPersona(t, i, `<td class="num">${fmt(x.ordenes)}</td><td class="num">${x.horas.toLocaleString('es-AR', { maximumFractionDigits: 1 })}</td>`, t === '(sin técnico)' ? null : { t: 'e', f: { tecnico: t }, titulo: `Encuestas de órdenes de ${t}` })).join('')}</tbody></table>`
+        : '<p class="no-data">No hay órdenes de la base de pasos con los filtros elegidos.</p>';
 }
 
 function renderAsesorTableAll(perAses, groupOrder) {
@@ -99,8 +175,8 @@ function renderAsesorTableAll(perAses, groupOrder) {
         .map(a => [a, Object.values(perAses[a]).reduce((x, y) => x + y, 0)])
         .sort((x, y) => y[1] - x[1]);
     const cols = groupOrder.filter(g => names.some(([a]) => perAses[a][g]));
-    const head = `<tr><th>Asesor</th>${cols.map(c => `<th style="text-align:right;">${c}</th>`).join('')}<th style="text-align:right;">Total</th></tr>`;
-    const body = names.map(([a, t]) => `<tr><td>${a}</td>${cols.map(c => `<td style="text-align:right;">${perAses[a][c] || ''}</td>`).join('')}<td style="text-align:right;"><strong>${t}</strong></td></tr>`).join('');
+    const head = `<tr><th>${term().Asesor}</th>${cols.map(c => `<th style="text-align:right;">${c}</th>`).join('')}<th style="text-align:right;">Total</th></tr>`;
+    const body = names.map(([a, t]) => `<tr ${attrDetalle({ t: 'r', f: { asesor: asesorFiltro(a) }, titulo: `Reclamos de ${a}` })}><td>${escHtml(a)}</td>${cols.map(c => `<td style="text-align:right;">${perAses[a][c] || ''}</td>`).join('')}<td style="text-align:right;"><strong>${t}</strong></td></tr>`).join('');
     cont.innerHTML = `<table>${'<thead>' + head + '</thead>'}<tbody>${body}</tbody></table>`;
 }
 
@@ -112,15 +188,15 @@ function renderAsesorTableSingle(asesor, groupOrder) {
     filteredData.forEach(d => {
         if ((d.asesor || '(sin asesor)') !== asesor) return;
         if (excl.has(normTip(d.tipologia))) return;
-        const g = _grupoLookup[normTip(d.tipologia)] || 'Otros';
-        const sub = (d.subtipologia && d.subtipologia.trim()) ? d.subtipologia.trim() : '(sin subtipología)';
+        const g = grupoDe(d.tipologia);
+        const sub = nombreSub(d);
         const k = g + '|' + sub;
         if (!rows[k]) rows[k] = { grupo: g, sub, count: 0 };
         rows[k].count++;
     });
     const arr = Object.values(rows).sort((a, b) => (groupOrder.indexOf(a.grupo) - groupOrder.indexOf(b.grupo)) || (b.count - a.count));
     const total = arr.reduce((a, r) => a + r.count, 0) || 1;
-    cont.innerHTML = `<table><thead><tr><th>Grupo</th><th>Subtipología</th><th style="text-align:right;">Casos</th><th style="text-align:right;">%</th></tr></thead><tbody>${arr.map(r => `<tr><td><span class="cruce-tip">${r.grupo}</span></td><td>${r.sub.substring(0, 60)}</td><td style="text-align:right;"><strong>${r.count}</strong></td><td style="text-align:right;">${((r.count / total) * 100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`;
+    cont.innerHTML = `<table><thead><tr><th>Grupo</th><th>Subtipología</th><th style="text-align:right;">Casos</th><th style="text-align:right;">%</th></tr></thead><tbody>${arr.map(r => `<tr ${attrDetalle({ t: 'r', f: { asesor: asesorFiltro(asesor), grupo: r.grupo, sub: r.sub }, titulo: `${asesor} · ${r.sub}` })}><td><span class="cruce-tip">${r.grupo}</span></td><td>${r.sub.substring(0, 60)}</td><td style="text-align:right;"><strong>${r.count}</strong></td><td style="text-align:right;">${((r.count / total) * 100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`;
 }
 
 function renderExpInto(el, obj, kind) {
@@ -152,7 +228,7 @@ function renderCoaching() {
     const per = {};
     filteredData.forEach(d => {
         if (excl.has(normTip(d.tipologia))) return;
-        const g = _grupoLookup[normTip(d.tipologia)] || 'Otros';
+        const g = grupoDe(d.tipologia);
         if (grupoSel && g !== grupoSel) return;
         const a = d.asesor || '(sin asesor)';
         if (!per[a]) per[a] = { pos: {}, neg: {}, tipos: {}, nRec: 0, nCom: 0 };
@@ -228,7 +304,7 @@ function renderCoaching() {
         const worstNeg = r.allNeg[0] ? r.allNeg[0][0] : '';
         const topTipoL = r.topTipo ? r.topTipo[0] : '';
         return `
-        <tr>
+        <tr ${attrDetalle({ t: 'r', f: { asesor: asesorFiltro(r.asesor) }, titulo: `Reclamos de ${r.asesor}` })}>
             <td><strong>${r.asesor}</strong><span class="vb-meta">${r.nRec} reclamos · ${r.nCom} c/comentario</span></td>
             <td style="text-align:center;">${lvsCell(r.asesor)}</td>
             <td style="text-align:center;">${npsCell(r.asesor)}</td>
@@ -242,7 +318,7 @@ function renderCoaching() {
     cont.innerHTML = `
         <table class="cruce-table">
             <thead><tr>
-                <th>Asesor</th>
+                <th>${term().Asesor}</th>
                 <th style="text-align:center;">⭐ LVS ▲</th>
                 <th style="text-align:center;">⭐ NPS</th>
                 <th style="text-align:center;">📞 Tasa resp.</th>
@@ -268,7 +344,7 @@ function renderAsesorClouds() {
         if (excl.has(normTip(d.tipologia))) return;
         if (!d.comentario || !d.comentario.trim()) return;
         if (asesorSel && (d.asesor || '(sin asesor)') !== asesorSel) return;
-        const g = _grupoLookup[normTip(d.tipologia)] || 'Otros';
+        const g = grupoDe(d.tipologia);
         if (grupoSel && g !== grupoSel) return;
         const e = expCategorize(d.comentario);
         Object.entries(e.pos).forEach(([k, v]) => pos[k] = (pos[k] || 0) + v);
@@ -276,7 +352,7 @@ function renderAsesorClouds() {
         nCom++;
     });
 
-    const scope = `${asesorSel || 'Todos los asesores'} · ${grupoSel || 'Todos los tipos'} · ${nCom} comentario${nCom !== 1 ? 's' : ''}`;
+    const scope = `${asesorSel || 'Todos los ' + term().asesores} · ${grupoSel || 'Todos los tipos'} · ${nCom} comentario${nCom !== 1 ? 's' : ''}`;
     const t = document.getElementById('cloudTitle');
     if (t) t.textContent = `🧩 Experiencias agrupadas — ${scope}`;
     renderExpInto(wowEl, pos, 'pos');

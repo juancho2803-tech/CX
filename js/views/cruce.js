@@ -5,8 +5,11 @@
 function computeCruce() {
     // Respeta el filtro de Taller (las demás columnas del cruce son independientes de los filtros)
     const tallS = tallerSel();
-    const sData = tallS.length ? surveyData.filter(s => tallS.includes(s.taller)) : surveyData;
-    const oData = tallS.length ? originalData.filter(d => tallS.includes(d.taller)) : originalData;
+    const canS = canalSel();
+    const sData = surveyData.filter(s => (!tallS.length || tallS.includes(s.taller)) && enCanal(s, canS));
+    // "Cliente sin Reclamo" no es un reclamo: no cuenta como cliente con reclamo
+    const excl = new Set(RECLAMO_EXCLUIR.map(normTip));
+    const oData = originalData.filter(d => !excl.has(normTip(d.tipologia)) && (!tallS.length || tallS.includes(d.taller)) && enCanal(d, canS));
 
     // Mapa NroOrden -> Dominio (desde la base de encuestas)
     const orden2dom = {};
@@ -86,26 +89,24 @@ function renderCruce() {
     else if (!hasTipo) aviso = '<div class="cruce-aviso">⚠️ Falta la base de <b>Tipologías (Detalle)</b>: no hay reclamos para cruzar.</div>';
 
     // KPIs
+    // Cada card dice qué cuenta
+    const card = (n, l, d) => `<div class="cruce-kpi"><div class="n">${n}</div><div class="l">${l}</div><div class="d">${d}</div></div>`;
     const kpis = `
         <div class="cruce-kpis">
-            <div class="cruce-kpi"><div class="n">${fmt(t.encuestas, 0)}</div><div class="l">Encuestas (dominios únicos)</div></div>
-            <div class="cruce-kpi"><div class="n">${fmt(t.clientes, 0)}</div><div class="l">Clientes con reclamo</div></div>
-            <div class="cruce-kpi"><div class="n">${fmt(t.reclamos, 0)}</div><div class="l">Total reclamos</div></div>
-            <div class="cruce-kpi"><div class="n">${fmt(t.recPorEnc, 2)}</div><div class="l">Reclamos por encuesta</div></div>
-            <div class="cruce-kpi"><div class="n">${pct(t.pctConReclamo)}</div><div class="l">% encuestas con reclamo</div></div>
-            <div class="cruce-kpi"><div class="n">${fmt(t.tipos, 0)}</div><div class="l">Tipologías distintas</div></div>
-            <div class="cruce-kpi"><div class="n">${fmt(t.multi, 0)}</div><div class="l">Clientes c/ varios reclamos</div></div>
+            ${card(fmt(t.encuestas, 0), 'Encuestas (dominios únicos)', 'Vehículos distintos con encuesta generada, en cualquier estado. Un dominio cuenta una vez por mes.')}
+            ${card(fmt(t.clientes, 0), 'Clientes con reclamo', 'Dominio + fecha del Detalle con al menos una tipología de reclamo (no cuenta "Cliente sin Reclamo").')}
+            ${card(fmt(t.reclamos, 0), 'Total reclamos', 'Tipologías de reclamo cargadas en el Detalle: un cliente con 3 tipologías suma 3.')}
+            ${card(fmt(t.tipos, 0), 'Tipologías distintas', 'Cantidad de tipologías de reclamo diferentes que aparecen en el período.')}
+            ${card(fmt(t.multi, 0), 'Clientes con varios reclamos', 'Mismo dominio y fecha con 2 o más tipologías cargadas.')}
         </div>`;
 
     // Tabla mensual
     const monthRows = c.months.map(m => `
-        <tr>
+        <tr ${attrDetalle({ t: 'r', f: { mes: m.mes }, titulo: `Reclamos de ${mesLabel(m.mes)}` })}>
             <td><strong>${mesLabel(m.mes)}</strong></td>
             <td class="num">${m.encuestas ? m.encuestas.toLocaleString('es-AR') : '—'}</td>
             <td class="num">${m.clientes.toLocaleString('es-AR')}</td>
             <td class="num">${m.reclamos.toLocaleString('es-AR')}</td>
-            <td class="num">${m.recPorEnc == null ? '—' : fmt(m.recPorEnc, 2)}</td>
-            <td class="num">${pct(m.pctConReclamo)}</td>
             <td class="num">${m.tipos}</td>
             <td class="num">${m.multi}</td>
         </tr>`).join('');
@@ -116,17 +117,16 @@ function renderCruce() {
             <table class="cruce-table">
                 <thead><tr>
                     <th>Mes</th><th class="num">Encuestas</th><th class="num">Clientes c/ reclamo</th>
-                    <th class="num">Reclamos</th><th class="num">Reclamos/encuesta</th>
-                    <th class="num">% enc. c/ reclamo</th><th class="num">Tipologías</th><th class="num">C/ varios</th>
+                    <th class="num">Reclamos</th><th class="num">Tipologías</th><th class="num">C/ varios</th>
                 </tr></thead>
-                <tbody>${monthRows || '<tr><td colspan="8" class="no-data">Sin datos</td></tr>'}</tbody>
+                <tbody>${monthRows || '<tr><td colspan="6" class="no-data">Sin datos</td></tr>'}</tbody>
             </table></div>
             <p class="cruce-nota">Cada <b>dominio</b> del Reporte cuenta como 1 encuesta por mes. En el Detalle, un mismo <b>dominio + fecha</b> es 1 cliente; si tiene más de una fila, son varios reclamos de ese cliente. El dominio se trae al Detalle cruzando por <b>NroOrden</b>.</p>
         </div>`;
 
     // Detalle por cliente (dominio + día)
     const detailCard = `
-        <div class="chart-card">
+        <div class="chart-card" id="cruceDetalle">
             <div class="chart-title">👤 Detalle por cliente (dominio + fecha)</div>
             <div class="vb-controls">
                 <input type="text" id="cruceSearch" placeholder="🔎 Buscar dominio, cliente, marca o tipología…" />
@@ -143,8 +143,17 @@ function renderCruce() {
     const si = document.getElementById('cruceSearch'), mi = document.getElementById('cruceMulti');
     if (si) si.addEventListener('input', () => renderCruceDetail(c.groups));
     if (mi) mi.addEventListener('change', () => renderCruceDetail(c.groups));
+    _cruceGrupos = c.groups;
     renderCruceDetail(c.groups);
 }
+
+let _cruceGrupos = [];
+registrarFuenteExcel('cruceDetalle', () => ({
+    nombre: 'Detalle por cliente',
+    filas: [['Dominio', 'Fecha', 'Marca', 'Cliente', 'Reclamos', 'Tipologías distintas', 'Tipologías'],
+        ..._cruceGrupos.slice().sort((a, b) => b.reclamos - a.reclamos || b.dia.localeCompare(a.dia))
+            .map(g => [g.dominio, g.dia, g.marca || '', g.cliente || '', g.reclamos, g.tipos.size, [...g.tipos].join(' / ')])]
+}));
 
 function renderCruceDetail(groups) {
     const cont = document.getElementById('cruceDetailContainer');

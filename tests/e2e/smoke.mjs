@@ -1,30 +1,21 @@
 // Prueba de humo en navegador: abre index.html, carga los CSV de ejemplo, recorre todas las
 // solapas y verifica que no haya errores y que los KPIs coincidan con lo calculado a mano.
 //
-// Uso:  npm run test:e2e
-// Sin acceso a los CDN (red corporativa): LIBS_DIR=./node_modules npm run test:e2e
-//   (requiere npm install chart.js@4.4.1 papaparse@5.4.1 xlsx@0.18.5)
+// Uso:  npm run test:e2e   (las librerías están en vendor/: no requiere internet)
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../helpers/cargar-modulos.mjs';
 
 const CSV = ['data/ejemplo/encuestas_ejemplo.csv', 'data/ejemplo/detalle_tipologias_ejemplo.csv'].map(f => path.join(ROOT, f));
-const LIBS = { 'Chart.js': 'chart.js/dist/chart.umd.js', 'PapaParse': 'papaparse/papaparse.min.js', 'xlsx': 'xlsx/dist/xlsx.full.min.js' };
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 const errores = [];
 page.on('pageerror', e => errores.push(e.message));
 page.on('console', msg => { if (msg.type() === 'error') errores.push(msg.text()); });
-
-if (process.env.LIBS_DIR) {
-  await page.route(/cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net/, route => {
-    const key = Object.keys(LIBS).find(k => route.request().url().includes(k));
-    route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(path.join(process.env.LIBS_DIR, LIBS[key])) });
-  });
-}
+// Bloquea cualquier pedido a internet: el tablero debe funcionar solo con archivos locales
+await page.route(/^https?:\/\//, route => { errores.push('pedido externo: ' + route.request().url()); route.abort(); });
 
 try {
   await page.goto('file://' + path.join(ROOT, 'index.html'));
