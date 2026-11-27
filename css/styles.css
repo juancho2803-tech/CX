@@ -425,6 +425,7 @@ tr:hover { background: var(--bg-secondary); }
 .sheets-texto { flex: 1 1 240px; color: var(--text-secondary); }
 .sheets-texto.sheets-ok { color: var(--success); }
 .sheets-texto.sheets-error { color: var(--danger); font-weight: 600; }
+.sheets-texto.sheets-aviso { color: var(--warning); font-weight: 600; }
 .sheets-texto.sheets-trabajando { color: var(--primary); }
 .sheets-btn { height: 32px; padding: 0 0.8rem; font-size: 12px; }
 .sheets-config { margin-top: 0.6rem; padding: 0.9rem 1rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); }

@@ -50,6 +50,15 @@ function gestionEjecutivos() {
 function gestionGuardarEjecutivos(mapa) {
     try { localStorage.setItem('cxEjecutivos', JSON.stringify(mapa)); } catch (e) { /* sin almacenamiento: queda hasta recargar */ }
     _gestionMemoria = mapa;
+    // Conectado a Google Sheets: la asignación se comparte con todos los que usan la hoja
+    if (typeof sheetsGuardarConfigCompartida === 'function') sheetsGuardarConfigCompartida({ ejecutivos: mapa });
+}
+// Al leer la hoja se toma la asignación compartida (tiene prioridad sobre la de este navegador)
+function aplicarConfigCompartida(config) {
+    if (!config || !config.ejecutivos) return;
+    _gestionMemoria = { ...GESTION_EJECUTIVOS_BASE, ...config.ejecutivos };
+    try { localStorage.setItem('cxEjecutivos', JSON.stringify(_gestionMemoria)); } catch (e) { /* sin almacenamiento */ }
+    if (document.getElementById('gestionCard')) renderGestion();
 }
 let _gestionMemoria = null;
 const gestionEjecutivo = marca => ((_gestionMemoria || gestionEjecutivos())[String(marca || '').toUpperCase()] || '(sin asignar)');
@@ -186,7 +195,7 @@ function renderGestion() {
         <details class="g-asignacion">
             <summary>✏️ Ejecutivo asignado a cada marca</summary>
             <p class="cruce-nota">El reporte solo dice quién completó cada encuesta, no quién la tiene asignada: el informe toma el ejecutivo de la marca.
-                Se guarda en este navegador.</p>
+                ${sheetsConfig() ? 'Se guarda en la hoja de Google: la ven todos los que usan el tablero.' : 'Se guarda en este navegador (conectado a Google Sheets se comparte con todos).'}</p>
             <div class="g-asig-grid">${marcas.map(m => `<label>${escHtml(m)}<input type="text" data-marca="${escHtml(m)}" value="${escHtml(mapa[m] || '')}" placeholder="(sin asignar)"></label>`).join('')}</div>
             <button type="button" class="btn-secondary" id="gestionGuardar">Guardar asignación</button>
         </details>

@@ -68,3 +68,11 @@ La hoja funciona como historial. Cada vez que se sube un reporte, el tablero lee
 - Se pueden subir reportes que se superponen (por ejemplo, el mes completo cada semana): solo se agregan los registros nuevos.
 - Si el tablero no pudo leer la hoja, no guarda: así un navegador sin los datos no pisa el historial.
 - El script además rechaza un guardado que deje una base con menos del 90% de las filas que tenía.
+
+## Varias personas y varias PC
+
+- **Conectar otra PC:** en un navegador ya conectado, ☁️ ⚙️ → **🔗 Copiar enlace para otra PC**. El enlace (…/CX/#clave=…) conecta el navegador donde se abre y la clave desaparece de la dirección. Incluye la clave: pasalo por privado. Si no, en cada PC: ☁️ Conectar y escribir la clave (la URL ya viene cargada).
+- **Guardados simultáneos:** cada guardado usa su propia hoja temporal y, al cerrar, el script lo **une** con lo que ya tiene la hoja (no lo reemplaza). Dos personas que suben reportes a la vez no se pisan. Si la hoja está ocupada con otro guardado, el tablero espera y reintenta.
+- **Datos de otros:** cada 3 minutos (y al volver a la pestaña) el tablero revisa si alguien guardó algo nuevo y muestra **Actualizar**.
+- **Configuración compartida:** la asignación de ejecutivo por marca del informe de productividad se guarda en el script (Propiedades del script → CONFIG) y la ven todos.
+- Al actualizar el código del script: Implementar → Administrar implementaciones → ✏️ → Versión: **Nueva versión** → Implementar (así la URL no cambia).

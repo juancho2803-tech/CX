@@ -64,7 +64,7 @@ En Ventas la unidad es el **interno**. El control de encuestas no lo trae: se to
 
 ## Datos guardados en Google Sheets
 
-Los reportes pueden quedar guardados en una hoja de Google Sheets: al abrir el tablero se cargan solos. Instalación y uso: [apps-script/LEEME.md](apps-script/LEEME.md). La URL del Apps Script ya viene cargada en el tablero (sola no da acceso a nada); la clave no va en el repositorio: cada usuario la carga una vez en su navegador (☁️ Conectar).
+Los reportes pueden quedar guardados en una hoja de Google Sheets: al abrir el tablero se cargan solos. Instalación y uso: [apps-script/LEEME.md](apps-script/LEEME.md). La URL del Apps Script ya viene cargada en el tablero (sola no da acceso a nada); la clave no va en el repositorio: cada usuario la carga una vez en su navegador (☁️ Conectar), o abre el enlace de **🔗 Copiar enlace para otra PC**. Varias personas pueden usarlo a la vez: la hoja une los guardados y avisa cuando hay datos nuevos.
 
 ## Privacidad
 

@@ -117,16 +117,30 @@ async function sheetsPedir(cfg, params, cuerpo) {
     return json;
 }
 
+// Si otra persona está guardando, la hoja responde "ocupado": se espera y se reintenta
+async function sheetsPedirConEspera(cfg, params, cuerpo) {
+    for (let intento = 1; ; intento++) {
+        try { return await sheetsPedir(cfg, params, cuerpo); } catch (e) {
+            if (intento >= 4 || !/ocupada/.test(e.message)) throw e;
+            sheetsMostrar('Otra persona está guardando en la hoja; esperando para guardar…', 'trabajando');
+            await new Promise(res => setTimeout(res, 5000 * intento));
+        }
+    }
+}
+
+// Guarda una base: la hoja UNE lo que llega con lo que ya tenía (no reemplaza), así varias personas
+// pueden guardar sin pisarse. Devuelve { total en la hoja, enviadas }.
 async function sheetsGuardarBase(cfg, base) {
     const datos = datosDeBase(base);
-    if (!datos.length) return 0;
-    await sheetsPedir(cfg, null, { accion: 'iniciar', base, campos: SHEETS_CAMPOS[base] });
+    if (!datos.length) return { total: 0, enviadas: 0 };
+    const id = Math.random().toString(36).slice(2, 10);
+    await sheetsPedirConEspera(cfg, null, { accion: 'iniciar', base, id, campos: SHEETS_CAMPOS[base] });
     for (let i = 0; i < datos.length; i += SHEETS_LOTE) {
         sheetsMostrar(`Guardando ${SHEETS_NOMBRES[base]}… ${fmt(Math.min(i + SHEETS_LOTE, datos.length))} de ${fmt(datos.length)}`, 'trabajando');
-        await sheetsPedir(cfg, null, { accion: 'agregar', base, filas: datos.slice(i, i + SHEETS_LOTE).map(r => aFila(base, r)) });
+        await sheetsPedir(cfg, null, { accion: 'agregar', base, id, filas: datos.slice(i, i + SHEETS_LOTE).map(r => aFila(base, r)) });
     }
-    const fin = await sheetsPedir(cfg, null, { accion: 'cerrar', base, total: datos.length });
-    return fin.total;
+    const fin = await sheetsPedirConEspera(cfg, null, { accion: 'cerrar', base, id, total: datos.length });
+    return { total: fin.total, enviadas: datos.length };
 }
 
 async function sheetsCargarBase(cfg, base) {
@@ -154,7 +168,15 @@ async function sheetsGuardar(bases) {
     if (!lista.length) { sheetsMostrar('No hay datos para guardar.', 'error'); return; }
     try {
         const hechos = [];
-        for (const b of lista) hechos.push(`${SHEETS_NOMBRES[b]} ${fmt(await sheetsGuardarBase(cfg, b))}`);
+        let deOtros = false;
+        for (const b of lista) {
+            const r = await sheetsGuardarBase(cfg, b);
+            if (r.total > r.enviadas) deOtros = true;   // la hoja tenía registros que otra persona guardó
+            hechos.push(`${SHEETS_NOMBRES[b]} ${fmt(r.total)}`);
+        }
+        // Se traen los registros que guardaron otras personas, para ver lo mismo que hay en la hoja
+        if (deOtros) await _sheetsLeerYUnir();
+        await sheetsMarcarVisto(cfg);
         sheetsMostrar(`Guardado en Google Sheets · ${hechos.join(' · ')} · ${horaCorta(new Date())}`, 'ok');
     } catch (e) {
         sheetsMostrar('No se pudo guardar en Google Sheets: ' + e.message, 'error');
@@ -164,6 +186,43 @@ async function sheetsGuardar(bases) {
 // La hoja es el historial: nunca se guarda sin haber leído antes lo que tiene, así lo nuevo se suma
 // a lo guardado en lugar de reemplazarlo. sheetsSincronizado = ya se leyó la hoja en esta sesión.
 let sheetsSincronizado = false;
+let sheetsUltimaVista = '';   // fecha del último guardado en la hoja que ya está en pantalla
+let sheetsHayNuevos = false;
+
+const ultimaActualizacion = info => Object.values(info.bases || {}).map(b => b.actualizado).filter(Boolean).sort().pop() || '';
+async function sheetsMarcarVisto(cfg) {
+    try { sheetsUltimaVista = ultimaActualizacion(await sheetsPedir(cfg, { accion: 'info' })); sheetsHayNuevos = false; } catch (e) { /* se reintenta en la próxima revisión */ }
+}
+
+// Cada 3 minutos (con la pestaña a la vista) se fija si otra persona guardó datos nuevos y avisa
+async function sheetsRevisarNuevos() {
+    const cfg = sheetsConfig();
+    if (!cfg || !sheetsSincronizado || _sheetsCarga || document.visibilityState !== 'visible' || sheetsEstado.tipo === 'trabajando') return;
+    try {
+        const ultima = ultimaActualizacion(await sheetsPedir(cfg, { accion: 'info' }));
+        if (ultima && ultima > sheetsUltimaVista && !sheetsHayNuevos) {
+            sheetsHayNuevos = true;
+            sheetsMostrar('Otra persona guardó datos nuevos en la hoja.', 'aviso');
+        }
+    } catch (e) { /* sin conexión: se vuelve a probar */ }
+}
+
+// Configuración compartida por todos los que usan la hoja (p. ej. ejecutivo de cada marca)
+let sheetsConfigCompartida = {};
+async function sheetsLeerConfigCompartida(cfg) {
+    try {
+        sheetsConfigCompartida = (await sheetsPedir(cfg, { accion: 'config' })).config || {};
+        if (typeof aplicarConfigCompartida === 'function') aplicarConfigCompartida(sheetsConfigCompartida);
+    } catch (e) { /* script anterior sin configuración compartida */ }
+}
+async function sheetsGuardarConfigCompartida(parcial) {
+    const cfg = sheetsConfig();
+    if (!cfg) return false;
+    try {
+        sheetsConfigCompartida = (await sheetsPedirConEspera(cfg, null, { accion: 'config', config: parcial })).config || {};
+        return true;
+    } catch (e) { sheetsMostrar('No se pudo guardar la configuración en la hoja: ' + e.message, 'error'); return false; }
+}
 let _sheetsCarga = null;
 
 // Lee la hoja (una sola vez a la vez) y, si en pantalla había datos que la hoja no tenía, los guarda
@@ -183,6 +242,21 @@ async function sheetsGuardarDespuesDeSubir(bases) {
     await sheetsGuardar(bases);
 }
 
+// true si en pantalla hay registros que la hoja no tiene, o que tiene con otros datos (hay que guardarlos)
+function sheetsFaltanEnHoja(base, guardadas, locales) {
+    if (!locales.length) return false;
+    if (!guardadas.length) return true;
+    const tipo = tipoDeBase(base);
+    const clave = tipo === 'tipologias' ? (r => r.orden || `${r.cliente}|${r.fechaStr}`) : CLAVE_REGISTRO[tipo];
+    const texto = r => JSON.stringify(aFila(base, r));
+    const enHoja = new Map();
+    guardadas.forEach(r => { const k = clave(r); enHoja.set(k, (enHoja.get(k) || '') + texto(r)); });
+    const enPantalla = new Map();
+    locales.forEach(r => { const k = clave(r); enPantalla.set(k, (enPantalla.get(k) || '') + texto(r)); });
+    for (const [k, t] of enPantalla) if (enHoja.get(k) !== t) return true;
+    return false;
+}
+
 // Trae todo lo guardado y lo une con lo que haya en pantalla (sin duplicar; si un registro está en los dos,
 // queda la versión de pantalla, que es la más nueva). Devuelve las bases que tenían datos nuevos para guardar.
 async function _sheetsLeerYUnir() {
@@ -191,13 +265,14 @@ async function _sheetsLeerYUnir() {
     try {
         sheetsMostrar('Conectando con Google Sheets…', 'trabajando');
         const info = await sheetsPedir(cfg, { accion: 'info' });
+        await sheetsLeerConfigCompartida(cfg);
         const cargadas = [], conLocales = [];
         for (const base of Object.keys(SHEETS_CAMPOS)) {
             const guardadas = info.bases[base] && info.bases[base].total ? await sheetsCargarBase(cfg, base) : [];
             guardarArea();
             const area = AREAS[areaDeBase(base)], campo = CAMPO_DE_TIPO[tipoDeBase(base)];
             const locales = area[campo];
-            if (locales.length) conLocales.push(base);
+            if (sheetsFaltanEnHoja(base, guardadas, locales)) conLocales.push(base);
             area[campo] = unirBase(tipoDeBase(base), guardadas, locales);
             usarArea(areaActual);
             if (guardadas.length) cargadas.push(`${SHEETS_NOMBRES[base]} ${fmt(guardadas.length)}`);
@@ -209,6 +284,8 @@ async function _sheetsLeerYUnir() {
             return conLocales;
         }
         if (!conLocales.length) despuesDeCargarDatos();
+        sheetsUltimaVista = ultimaActualizacion(info);
+        sheetsHayNuevos = false;
         const fechas = Object.values(info.bases).map(b => b.actualizado).filter(Boolean).sort();
         const ultima = fechas.length ? ` · último guardado ${horaCorta(new Date(fechas[fechas.length - 1]))}` : '';
         sheetsMostrar(`Datos cargados desde Google Sheets · ${cargadas.join(' · ')}${ultima}`, 'ok');
@@ -241,8 +318,9 @@ function renderSheetsBar() {
         const ocupado = sheetsEstado.tipo === 'trabajando';
         bar.innerHTML = `<span class="sheets-icono" aria-hidden="true">☁️</span>
             <span class="sheets-texto sheets-${sheetsEstado.tipo || 'ok'}">${escHtml(sheetsEstado.texto || 'Conectado a Google Sheets')}</span>
+            ${sheetsHayNuevos ? `<button type="button" class="btn-primary sheets-btn" data-sheets="cargar"${ocupado ? ' disabled' : ''}>Actualizar</button>` : ''}
             <button type="button" class="btn-secondary sheets-btn" data-sheets="guardar"${ocupado ? ' disabled' : ''}>Guardar ahora</button>
-            <button type="button" class="btn-secondary sheets-btn" data-sheets="cargar"${ocupado ? ' disabled' : ''}>Recargar</button>
+            ${sheetsHayNuevos ? '' : `<button type="button" class="btn-secondary sheets-btn" data-sheets="cargar"${ocupado ? ' disabled' : ''}>Recargar</button>`}
             <button type="button" class="btn-secondary sheets-btn" data-sheets="config" title="Configurar conexión">⚙️</button>`;
     }
 }
@@ -259,10 +337,11 @@ function sheetsAbrirConfig() {
                 <input type="password" id="sheetsClave" autocomplete="off" value="${escHtml(cfg.clave)}"></label>
             <div class="sheets-form-acciones">
                 <button type="button" class="btn-primary" data-sheets="probar">Probar y conectar</button>
+                ${sheetsConfig() ? '<button type="button" class="btn-secondary" data-sheets="enlace" title="Enlace con la clave para conectar otra PC">🔗 Copiar enlace para otra PC</button>' : ''}
                 ${sheetsConfig() ? '<button type="button" class="btn-secondary" data-sheets="desconectar">Desconectar</button>' : ''}
                 <button type="button" class="btn-secondary" data-sheets="cancelar">Cancelar</button>
             </div>
-            <p class="cruce-nota">La URL ya viene cargada con la hoja del tablero: solo falta la clave. La clave queda guardada solo en este navegador. Cómo crear el Apps Script: ver apps-script/LEEME.md en el repositorio.</p>
+            <p class="cruce-nota">La URL ya viene cargada con la hoja del tablero: solo falta la clave, que queda guardada en este navegador. Para otra PC usá "Copiar enlace para otra PC". Cómo crear el Apps Script: ver apps-script/LEEME.md en el repositorio.</p>
         </div>`;
     document.getElementById(cfg.clave ? 'sheetsUrl' : 'sheetsClave').focus();
 }
@@ -299,7 +378,26 @@ function iniciarSheets() {
         if (acc === 'desconectar') { sheetsSincronizado = false; sheetsGuardarConfig('', ''); document.getElementById('sheetsConfig').hidden = true; sheetsMostrar('', ''); }
         if (acc === 'guardar') sheetsGuardar();
         if (acc === 'cargar') sheetsCargar();
+        if (acc === 'enlace') sheetsCopiarEnlace();
     });
+    // Enlace para conectar otra PC: …/#clave=XXXX guarda la clave en este navegador y la borra de la dirección
+    // (lo que va después de # no se envía a ningún servidor)
+    const m = location.hash.match(/clave=([^&]+)/);
+    if (m) {
+        sheetsGuardarConfig(sheetsConfig()?.url || SHEETS_URL_BASE, decodeURIComponent(m[1]));
+        history.replaceState(null, '', location.pathname + location.search);
+    }
     renderSheetsBar();
     if (sheetsConfig()) sheetsCargar();
+    setInterval(sheetsRevisarNuevos, 3 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sheetsRevisarNuevos(); });
+}
+
+// Copia un enlace que conecta otra PC sin escribir la clave
+async function sheetsCopiarEnlace() {
+    const cfg = sheetsConfig();
+    if (!cfg) return;
+    const enlace = `${location.origin}${location.pathname}#clave=${encodeURIComponent(cfg.clave)}`;
+    try { await navigator.clipboard.writeText(enlace); sheetsMostrar('Enlace copiado. Abrilo en la otra PC y queda conectada (pasalo por privado: incluye la clave).', 'ok'); }
+    catch (e) { window.prompt('Copiá este enlace y abrilo en la otra PC (incluye la clave: pasalo por privado):', enlace); }
 }
