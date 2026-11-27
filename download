@@ -1,0 +1,20 @@
+# ⚠️ Datos reales de clientes (DNI, teléfonos, emails): NUNCA subirlos al repositorio.
+# Solo se versionan los archivos ficticios de data/ejemplo/.
+*.csv
+*.xlsx
+*.xls
+!data/ejemplo/*.csv
+datos/*
+!datos/LEEME.md
+
+# Dependencias y resultados de pruebas
+node_modules/
+package-lock.json
+test-results/
+playwright-report/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

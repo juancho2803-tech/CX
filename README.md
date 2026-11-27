@@ -1,52 +1,70 @@
-# Dashboard de análisis de tipologías y experiencia de cliente
+# CX — Tablero de experiencia de cliente
 
-Tablero para analizar los reclamos de postventa por tipología, los resultados de las encuestas (NPS, LVS, tasa de respuesta) y la experiencia de los clientes por **marca, taller y asesor**, con resumen de verbatims y recomendaciones de coaching.
+Tablero para analizar las encuestas de satisfacción (NPS, LVS, tasa de respuesta) y los reclamos por tipología y etapa del proceso, en dos áreas: **🔧 Postventa** (taller) y **🚗 Ventas** (0km).
 
-Funciona 100 % en el navegador: **los archivos que cargás no se envían a ningún servidor**.
+Funciona 100 % en el navegador: **los archivos que cargás no se envían a ningún servidor**. Tampoco depende de internet: las librerías están incluidas en `vendor/`.
+
+**Versión online:** https://juancho2803-tech.github.io/CX/
 
 ## Cómo usarlo
 
-1. Abrí `index.html` con doble clic (Chrome, Edge o Firefox). También podés usarlo online si está publicado en GitHub Pages (ver más abajo).
-2. En **📁 Cargar Datos**, subí juntos los reportes que tengas. El tablero detecta solo qué es cada archivo y en qué codificación viene (UTF-8 o Latin-1).
-3. Usá los filtros de **Marca, Taller, Tipología, Sentimiento y Fechas** y tocá **Aplicar**. Marca y Taller permiten elegir uno, varios o ninguno (todos).
+1. Entrá a la versión online o abrí `index.html` con doble clic (Chrome, Edge o Firefox).
+2. Al abrir, elegí el área: **Postventa** o **Ventas**. Después se puede cambiar con los botones de arriba.
+3. En **Cargar reportes**, subí juntos los archivos del área. El tablero reconoce cada archivo por sus columnas; si es de la otra área, lo carga allá y te avisa.
+4. Los filtros de la izquierda (marca, taller o sucursal, canal de venta en Ventas, tipología y fechas) se aplican solos al elegir.
+5. Clic en cualquier barra, punto, fila o tarjeta con datos: se abre la tabla de los casos que hay detrás, con buscador y descarga a Excel.
 
-Para probarlo sin datos reales, cargá los dos archivos de `data/ejemplo/` (son ficticios).
+Para probarlo sin datos reales, cargá los archivos de `data/ejemplo/` (son ficticios).
 
 ### Archivos que acepta
 
-| Reporte | Cómo lo reconoce | Columnas que usa |
+| Área | Reporte | Cómo lo reconoce |
 |---|---|---|
-| **Encuestas** (FORD / CHEVROLET / AUDI, o VOLKSWAGEN) | tiene `Dominio` y `Resultado Encuesta` | Marca, Fecha Facturacion, Estado Encuesta, Cliente, Taller, Asesor, Nro. Orden, Modelo, Resultado Encuesta, Comentario, Dominio, Recomendacion Conces., Resultado Preg. Nps Ford |
-| **Detalle de tipologías** (DetalleSubTipologiasServ) | tiene `Tipologia` y `SubTipologia` | FechaFacturacion, Marca, NroOrden, Tipologia, SubTipologia, Comentario, Cliente, Asesor |
+| Postventa | **Encuestas** (Reporte) | `Dominio` y `Resultado Encuesta` |
+| Postventa | **Detalle de subtipologías** (DetalleSubTipologiasServ) | `Tipologia` y `SubTipologia` |
+| Postventa | **Pasos por taller** (una fila por orden, con patente, chasis, técnicos y horas) | `Patente` y `Fecha apertura orden` |
+| Ventas | **Control de encuestas de ventas** | `Nro. Operacion` y `Estado Encuesta` |
+| Ventas | **Motivos de reclamos de ventas** | `Nro. Operacion` y `Tipologias` (varias por celda, separadas por coma) |
+| Ventas | **Circuito Integral 0km** (una fila por unidad con la fecha de cada paso) | `Nro. Operacion`, `Fecha Pedido` y `Fecha Venta` |
 
-Se pueden cargar varios reportes de encuestas a la vez (por ejemplo, el de FORD/CHEVROLET/AUDI y el de VW): se suman sin duplicar. Formatos: CSV separado por `;` o Excel.
+Formatos: CSV separado por `;` o Excel. Se pueden subir varios archivos del mismo tipo (otro período, otra marca): se suman y, si una orden o encuesta ya estaba, queda la versión nueva.
+
+En Ventas la unidad es el **interno**. El control de encuestas no lo trae: se toma del circuito 0km por chasis. Encuestas, motivos y circuito se cruzan por número de operación.
 
 ## Solapas
 
 | Solapa | Qué muestra |
 |---|---|
-| 📊 Tipologías | KPIs de encuestas, reclamos agrupados (Taller, Procesos de atención, Turnos, Tiempos de entrega, etc.) ordenados de mayor a menor, y subtipologías |
-| 📋 Subtipologías | Mapas de calor tipología × subtipología y × sentimiento |
-| 💬 Sentimientos | Temas de dolor y positivos, y tabla de verbatims con puntos de dolor, positivos/wow y resumen CX por cliente |
-| 👥 Marca / 📅 Temporal | Distribución por marca y evolución en el tiempo |
-| 🎯 Comparativa | Marca × tipología y clientes con más reclamos |
-| 🔗 Encuestas vs Reclamos | Cruce mensual: encuestas, clientes con reclamo, reclamos por encuesta y clientes con varios reclamos |
-| 👤 Por Asesor | Ranking, experiencias agrupadas y **coaching**: LVS, NPS, tasa de respuesta, todas las fortalezas y puntos de dolor (⭐ mejor fortaleza, ⚠️ mayor debilidad) y cómo trabajar con cada asesor. Ordenado por menor LVS |
+| 📊 Tipologías | Ranking de tipologías dividido por marca, reclamos por grupo (en Ventas, por etapa) y subtipologías. Clic en una tipología: sus casos |
+| 📈 Evolución y marcas | Por mes: % reclamos, LVS, NPS y reclamos por etapa. Comparativa por marca y tipologías por marca |
+| 🔗 Encuestas vs Reclamos | Cruce mensual de encuestas y clientes con reclamo |
+| 👤 Por Asesor / Por Vendedor | Tasa de respuesta, NPS, LVS y % reclamos por asesor (y por técnico en Postventa), ranking y coaching |
+| 🛠️ Servicio vs Garantía | (Postventa) Cada tipología separada por tipo de orden, un vehículo por mes |
+| 🔎 Análisis de verbatims | Debilidades por etapa, oportunidades con ejemplos, control de tipificación contra el comentario y casos para revisar |
+| 📞 Productividad de encuestas | Arriba, el informe **Control de productividad**: por ejecutivo de satisfacción, marca y unidad de negocio (no iniciadas, sin contacto, pendientes, completadas, productividad contra el objetivo de 75% y estado), resumen por persona e indicador general. Debajo, generadas, completadas, tasa de respuesta y estados por marca, taller y mes; en Ventas, también por analista |
+| ⏱️ Circuito 0km | (Ventas) Días de venta a patentamiento, a entrega y de patentamiento a entrega (mediana) por sucursal, marca y vendedor; averías; demora de entrega vs insatisfacción |
+
+**Buscador de arriba:** en Postventa trae la ficha del vehículo por patente o chasis (visitas, encuesta y reclamos de cada una); en Ventas, la ficha de la unidad por dominio, chasis, operación o cliente (línea de tiempo del circuito, encuesta y reclamos).
+
+**Tarjetas de arriba:** encuestas por estado, sin contacto, 🔥 hot alerts (puntaje 1 a 3), % reclamos, LVS y NPS. El bloque de reclamos explica la relación con las encuestas: de las completadas con puntaje distinto de 5, cuántas tienen motivo cargado en el detalle y cuántas no (y por qué: "Cliente sin Reclamo", sin tipificar o fuera del detalle).
 
 ## Definición de indicadores
 
 | Indicador | Cálculo |
 |---|---|
 | Encuestas generadas | Filas del reporte de encuestas |
-| Completadas | `Estado Encuesta` = COMPLETADA. El % (tasa de respuesta) es completadas ÷ generadas |
-| % Reclamos | Encuestas con resultado distinto de 5 ÷ completadas |
-| LVS | Experiencia de la última visita: (5·Q5 + 4·Q4 + 3·Q3 + 2·Q2 + 1·Q1) ÷ encuestas con resultado de 1 a 5 |
-| NPS | % promotores (9–10) − % detractores (0–6). Usa `Recomendacion Conces.`; si está vacía, `Resultado Preg. Nps Ford` (así lo trae FORD). Acepta valores 0–10 o rangos como los de VW (`9 - 10`, `7 - 8`, `0 - … -6`). AUDI no trae este dato |
-| Puntuación 4 | Encuestas con resultado 4 |
-| Taller de un reclamo | El detalle de tipologías no trae taller: se toma del reporte de encuestas cruzando por número de orden |
-| Encuestas vs Reclamos | Cada dominio único por mes = 1 encuesta. En el detalle, mismo dominio + misma fecha = 1 cliente; más de una fila = cliente con varios reclamos |
+| Completadas | `Estado Encuesta` = COMPLETADA. Tasa de respuesta = completadas ÷ generadas |
+| % Reclamos | Encuestas completadas con puntaje distinto de 5 ÷ completadas |
+| Hot alerts | Encuestas con puntaje 1, 2 o 3 |
+| LVS | (5·Q5 + 4·Q4 + 3·Q3 + 2·Q2 + 1·Q1) ÷ encuestas con resultado de 1 a 5 |
+| NPS | % promotores (9–10) − % detractores (0–6). Usa `Recomendacion Conces.`; si está vacía, `Resultado Preg. Nps Ford`. Acepta rangos como `9 - 10` |
+| Motivo de reclamo | Fila del detalle con una tipología. No cuentan "Cliente sin Reclamo" ni "Sin tipificar" |
+| Etapa | Cada tipología pertenece a una etapa del proceso (`VB_ETAPAS` y `VB_ETAPAS_VENTAS` en `js/views/verbatims.js`); una orden o interno cuenta una vez por etapa |
+| Control de tipificación | El comentario debe usar palabras propias de su tipología (`VB_PALABRAS`). Un "no coincide" indica qué revisar, no es un error confirmado |
 
-"Cliente sin Reclamo" se excluye de los análisis de reclamos. El análisis de texto (dolor, wow, experiencias) es heurístico por patrones de lenguaje: sirve como primer barrido y puede tener casos borde.
+## Datos guardados en Google Sheets
+
+Los reportes pueden quedar guardados en una hoja de Google Sheets: al abrir el tablero se cargan solos. Instalación y uso: [apps-script/LEEME.md](apps-script/LEEME.md). La URL del Apps Script ya viene cargada en el tablero (sola no da acceso a nada); la clave no va en el repositorio: cada usuario la carga una vez en su navegador (☁️ Conectar).
 
 ## Privacidad
 
@@ -82,6 +100,7 @@ js/
   filters.js            Filtros globales (marca, taller, fechas…)
   views/                Una vista por solapa
   main.js               Navegación, eventos e inicio
+vendor/                 Librerías de terceros (Chart.js, PapaParse, SheetJS)
 data/ejemplo/           Datos ficticios para probar
 datos/                  Tus reportes reales (no se suben)
 tests/                  Pruebas automáticas
@@ -104,6 +123,6 @@ GitHub Actions corre todo automáticamente en cada push y pull request a `main`.
 
 ## Publicar en GitHub Pages
 
-En el repositorio: **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`**. En unos minutos queda disponible en `https://<usuario>.github.io/dashboard-analisis-tipologias/`.
+En el repositorio: **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`**. Cada cambio en `main` se publica en unos minutos en https://juancho2803-tech.github.io/CX/.
 
 Aunque el sitio sea público, los datos siguen sin salir del navegador de quien lo usa. Tené en cuenta que GitHub Pages en repositorios privados requiere un plan pago de GitHub.

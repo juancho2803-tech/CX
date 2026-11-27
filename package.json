@@ -1,6 +1,6 @@
 {
-  "name": "dashboard-analisis-tipologias",
-  "version": "1.0.0",
+  "name": "cx",
+  "version": "2.0.0",
   "private": true,
   "description": "Tablero de análisis de reclamos por tipología, encuestas (NPS, LVS) y experiencia de cliente por asesor y taller.",
   "scripts": {
@@ -12,5 +12,10 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "homepage": "https://juancho2803-tech.github.io/CX/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/juancho2803-tech/CX.git"
   }
 }
