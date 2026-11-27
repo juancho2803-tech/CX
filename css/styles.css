@@ -436,7 +436,9 @@ tr:hover { background: var(--bg-secondary); }
 
 /* Diseño: filtros en columna izquierda fija, contenido a la derecha */
 .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
-.sidebar { position: sticky; top: 1rem; z-index: 20; }   /* sin overflow: los desplegables de filtros no se recortan */
+.sidebar { position: sticky; top: 1rem; z-index: 20; max-height: calc(100vh - 2rem); overflow-y: auto; overflow-x: hidden;
+    scrollbar-width: thin; padding-right: 2px; }   /* si no entra en la pantalla, se desplaza sola */
+.sidebar .ms-panel { width: 100%; max-width: 100%; }   /* los desplegables no se salen de la columna */
 .filtros-panel { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; box-shadow: var(--shadow-sm); }
 .filtros-titulo { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin: 0 0 0.8rem; }
 .sidebar .controls-grid { grid-template-columns: 1fr; gap: 0.8rem; margin-bottom: 0.5rem; }
@@ -445,7 +447,7 @@ tr:hover { background: var(--bg-secondary); }
 .contenido .controls-section { padding: 1rem 1.25rem; margin-bottom: 1rem; }
 @media (max-width: 900px) {
     .layout { grid-template-columns: minmax(0, 1fr); }
-    .sidebar { position: static; }
+    .sidebar { position: static; max-height: none; overflow: visible; }
     .sidebar .controls-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sidebar .button-group { flex-direction: row; }
     .sidebar .button-group button { width: auto; flex: 1; }

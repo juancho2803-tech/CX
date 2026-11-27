@@ -73,6 +73,8 @@ function crearMultiSelect(select) {
         search.hidden = opciones().length <= 8;
         dibujarLista();
         panel.hidden = false;
+        // En la columna lateral con desplazamiento: que el desplegable abierto quede a la vista
+        requestAnimationFrame(() => panel.scrollIntoView({ block: 'nearest' }));
         trigger.setAttribute('aria-expanded', 'true');
         if (!search.hidden) search.focus();
     }
