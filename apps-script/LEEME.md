@@ -59,3 +59,12 @@ Implementar → Administrar implementaciones → editar (lápiz) → Versión: *
 ## Hoja en uso
 
 El tablero ya trae la URL de la aplicación web de la hoja actual (`SHEETS_URL_BASE` en `js/sheets.js`): al tocar ☁️ Conectar solo hay que escribir la clave. Si se crea otra hoja o una implementación nueva (no una versión nueva de la misma), hay que cambiar esa URL o pegarla en Conectar.
+
+## Historial sin duplicados
+
+La hoja funciona como historial. Cada vez que se sube un reporte, el tablero lee lo guardado, le suma lo nuevo y guarda el total:
+
+- Un registro que ya estaba no se duplica: queda la versión más nueva (por ejemplo, una encuesta que pasó de pendiente a completada). Se identifica por marca + orden u operación + dominio o chasis + fecha de facturación (encuestas), marca + orden (pasos), chasis + operación (circuito 0km). En el detalle de tipologías y motivos, las filas nuevas de una orden reemplazan a las anteriores de esa orden (pudo recodificarse).
+- Se pueden subir reportes que se superponen (por ejemplo, el mes completo cada semana): solo se agregan los registros nuevos.
+- Si el tablero no pudo leer la hoja, no guarda: así un navegador sin los datos no pisa el historial.
+- El script además rechaza un guardado que deje una base con menos del 90% de las filas que tenía.

@@ -28,7 +28,7 @@
 - Filtros en una columna a la izquierda, que se aplican solos al elegir; selectores con casillas y búsqueda.
 - Clic en cualquier barra, punto, fila o tarjeta abre los casos que hay detrás; tabla desplegable bajo cada gráfico; descargas en Excel.
 - Tarjetas de sin contacto y 🔥 hot alerts (1 a 3) con desglose por taller y asesor; estados de encuesta clicables.
-- Datos guardados en **Google Sheets** mediante un Apps Script con clave (`apps-script/`).
+- Datos guardados en **Google Sheets** mediante un Apps Script con clave (`apps-script/`). La hoja es un historial: cada reporte subido se suma a lo guardado sin duplicar registros, nunca se guarda sin haber leído antes la hoja, y el script rechaza un guardado que achique una base.
 
 
 ## 1.0.0 — 2026-11-19

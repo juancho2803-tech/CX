@@ -3,7 +3,8 @@
  *
  * Guarda las bases del tablero en esta hoja, una pestaña por base: Postventa (encuestas, detalle de tipologías
  * y pasos por taller) y Ventas (control de encuestas, motivos de reclamos y circuito 0km).
- * Se las devuelve al tablero cuando se abre.
+ * Se las devuelve al tablero cuando se abre. Funciona como historial: el tablero lee lo guardado, le suma lo
+ * que se sube (sin duplicar registros) y guarda el total; una base nunca se achica de golpe.
  *
  * Instalación (una sola vez): ver apps-script/LEEME.md
  *  1. Crear una hoja de cálculo en Google Drive → Extensiones → Apps Script → pegar este archivo.
@@ -122,6 +123,13 @@ function doPost(e) {
         return respuesta_({ ok: false, error: 'Faltaron filas: se esperaban ' + pedido.total + ' y llegaron ' + escritas + '. No se modificó la base guardada.' });
       }
       const vieja = libro.getSheetByName(nombre);
+      // Historial: el tablero siempre guarda lo anterior más lo nuevo, así que una base no debería achicarse.
+      // Si llegan muchas menos filas que las guardadas (p. ej. un navegador que no llegó a leer la hoja), no se reemplaza.
+      const antes = vieja ? Math.max(0, vieja.getLastRow() - 1) : 0;
+      if (antes && escritas < antes * 0.9 && !pedido.permitirMenos) {
+        libro.deleteSheet(hoja);
+        return respuesta_({ ok: false, error: 'La hoja tiene ' + antes + ' filas de ' + nombre + ' y llegaron ' + escritas + ': no se reemplazó para no perder historial.' });
+      }
       if (vieja) libro.deleteSheet(vieja);
       hoja.setName(nombre);
       escribirInfo_(libro, pedido.base, escritas);

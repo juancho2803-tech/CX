@@ -148,6 +148,8 @@ async function sheetsCargarBase(cfg, base) {
 async function sheetsGuardar(bases) {
     const cfg = sheetsConfig();
     if (!cfg) return;
+    // Sin haber leído la hoja no se guarda: se perdería lo que ya estaba guardado
+    if (!sheetsSincronizado) { await sheetsCargar(); return; }
     const lista = (bases && bases.length ? bases : Object.keys(SHEETS_CAMPOS)).filter(b => datosDeBase(b).length);
     if (!lista.length) { sheetsMostrar('No hay datos para guardar.', 'error'); return; }
     try {
@@ -159,29 +161,61 @@ async function sheetsGuardar(bases) {
     }
 }
 
-// Carga desde la hoja todo lo guardado y redibuja el tablero
-async function sheetsCargar() {
+// La hoja es el historial: nunca se guarda sin haber leído antes lo que tiene, así lo nuevo se suma
+// a lo guardado en lugar de reemplazarlo. sheetsSincronizado = ya se leyó la hoja en esta sesión.
+let sheetsSincronizado = false;
+let _sheetsCarga = null;
+
+// Lee la hoja (una sola vez a la vez) y, si en pantalla había datos que la hoja no tenía, los guarda
+function sheetsCargar() {
+    if (!_sheetsCarga) _sheetsCarga = (async () => {
+        const conLocales = await _sheetsLeerYUnir();
+        if (sheetsSincronizado && conLocales.length) await sheetsGuardar(conLocales);
+    })().finally(() => { _sheetsCarga = null; });
+    return _sheetsCarga;
+}
+
+// Después de subir archivos: se suman al historial (si todavía no se leyó la hoja, primero se lee y se une)
+async function sheetsGuardarDespuesDeSubir(bases) {
+    if (!sheetsConfig()) return;
+    if (_sheetsCarga) await _sheetsCarga;
+    if (!sheetsSincronizado) { await sheetsCargar(); return; }   // al leer se unen y se guardan
+    await sheetsGuardar(bases);
+}
+
+// Trae todo lo guardado y lo une con lo que haya en pantalla (sin duplicar; si un registro está en los dos,
+// queda la versión de pantalla, que es la más nueva). Devuelve las bases que tenían datos nuevos para guardar.
+async function _sheetsLeerYUnir() {
     const cfg = sheetsConfig();
-    if (!cfg) return;
+    if (!cfg) return [];
     try {
         sheetsMostrar('Conectando con Google Sheets…', 'trabajando');
         const info = await sheetsPedir(cfg, { accion: 'info' });
-        const cargadas = [];
+        const cargadas = [], conLocales = [];
         for (const base of Object.keys(SHEETS_CAMPOS)) {
-            if (!info.bases[base] || !info.bases[base].total) continue;
-            const filas = await sheetsCargarBase(cfg, base);
+            const guardadas = info.bases[base] && info.bases[base].total ? await sheetsCargarBase(cfg, base) : [];
             guardarArea();
-            AREAS[areaDeBase(base)][CAMPO_DE_TIPO[tipoDeBase(base)]] = filas;
+            const area = AREAS[areaDeBase(base)], campo = CAMPO_DE_TIPO[tipoDeBase(base)];
+            const locales = area[campo];
+            if (locales.length) conLocales.push(base);
+            area[campo] = unirBase(tipoDeBase(base), guardadas, locales);
             usarArea(areaActual);
-            cargadas.push(`${SHEETS_NOMBRES[base]} ${fmt(filas.length)}`);
+            if (guardadas.length) cargadas.push(`${SHEETS_NOMBRES[base]} ${fmt(guardadas.length)}`);
         }
-        if (!cargadas.length) { sheetsMostrar('Conectado a Google Sheets · la hoja todavía está vacía: subí los reportes y se guardan solos.', 'ok'); return; }
-        despuesDeCargarDatos();
+        sheetsSincronizado = true;
+        if (conLocales.length) despuesDeCargarDatos();
+        if (!cargadas.length) {
+            if (!conLocales.length) sheetsMostrar('Conectado a Google Sheets · la hoja todavía está vacía: subí los reportes y se guardan solos.', 'ok');
+            return conLocales;
+        }
+        if (!conLocales.length) despuesDeCargarDatos();
         const fechas = Object.values(info.bases).map(b => b.actualizado).filter(Boolean).sort();
         const ultima = fechas.length ? ` · último guardado ${horaCorta(new Date(fechas[fechas.length - 1]))}` : '';
         sheetsMostrar(`Datos cargados desde Google Sheets · ${cargadas.join(' · ')}${ultima}`, 'ok');
+        return conLocales;
     } catch (e) {
-        sheetsMostrar('No se pudo cargar desde Google Sheets: ' + e.message, 'error');
+        sheetsMostrar('No se pudo leer Google Sheets: ' + e.message + '. Lo que subas no se guarda hasta que se pueda leer la hoja (para no pisar el historial).', 'error');
+        return [];
     }
 }
 
@@ -244,10 +278,9 @@ async function sheetsProbar() {
         if (!sheetsGuardarConfig(url, clave)) { sheetsMostrar('Este navegador no permite guardar la configuración (modo privado o datos bloqueados).', 'error'); return; }
         document.getElementById('sheetsConfig').hidden = true;
         sheetsMostrar('Conectado a Google Sheets', 'ok');
-        // Si ya hay datos en pantalla se guardan; si no, se cargan los de la hoja
-        guardarArea();
-        if (Object.values(AREAS).some(a => a.surveyData.length || a.originalData.length || a.pasosData.length)) await sheetsGuardar();
-        else await sheetsCargar();
+        // Se lee la hoja y se une con lo que haya en pantalla; lo que la hoja no tenía se guarda
+        sheetsSincronizado = false;
+        await sheetsCargar();
     } catch (e) {
         sheetsMostrar('No se pudo conectar: ' + e.message, 'error');
     }
@@ -263,7 +296,7 @@ function iniciarSheets() {
         if (acc === 'config') sheetsAbrirConfig();
         if (acc === 'cancelar') document.getElementById('sheetsConfig').hidden = true;
         if (acc === 'probar') sheetsProbar();
-        if (acc === 'desconectar') { sheetsGuardarConfig('', ''); document.getElementById('sheetsConfig').hidden = true; sheetsMostrar('', ''); }
+        if (acc === 'desconectar') { sheetsSincronizado = false; sheetsGuardarConfig('', ''); document.getElementById('sheetsConfig').hidden = true; sheetsMostrar('', ''); }
         if (acc === 'guardar') sheetsGuardar();
         if (acc === 'cargar') sheetsCargar();
     });

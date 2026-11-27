@@ -214,6 +214,26 @@ function combinarNuevos(actuales, nuevos, clave) {
     return actuales.filter(r => !porClave.has(clave(r))).concat([...porClave.values()]);
 }
 
+// Claves que identifican un registro en cada base (para no duplicar al acumular períodos)
+const CLAVE_REGISTRO = {
+    encuestas: r => `${r.marca}|${r.orden}|${r.dominio || r.chasis}|${r.fechaStr}`,
+    pasos: r => r.marca + '|' + r.orden,
+    circuito: r => `${r.chasis}|${r.operacion}`
+};
+// Une una base guardada con filas nuevas sin duplicar; si un registro está en las dos, queda el nuevo.
+// En el detalle de tipologías la unidad es la orden (u operación): sus filas nuevas reemplazan a todas las anteriores
+// de esa orden, porque el analista pudo recodificarla.
+function unirBase(tipo, actuales, nuevos) {
+    if (!nuevos.length) return actuales;
+    if (!actuales.length) return tipo === 'tipologias' ? nuevos : combinarNuevos([], nuevos, CLAVE_REGISTRO[tipo]);
+    if (tipo === 'tipologias') {
+        const k = r => r.orden || `${r.cliente}|${r.fechaStr}`;
+        const nuevas = new Set(nuevos.map(k));
+        return actuales.filter(r => !nuevas.has(k(r))).concat(nuevos);
+    }
+    return combinarNuevos(actuales, nuevos, CLAVE_REGISTRO[tipo]);
+}
+
 // Carga un archivo en el área que corresponde (ver js/areas.js) y devuelve { type, n, area }
 function routeParsedData(rows, fields, nombreArchivo, crudas) {
     const area = areaDeArchivo(detectBaseType(fields), nombreArchivo, fields);
@@ -229,14 +249,14 @@ function cargarEnAreaActual(rows, fields, nombreArchivo) {
         const c = processCircuito(rows);
         if (!c.length) return null;
         // Si una unidad ya estaba (mismo chasis y operación), queda la versión nueva (el circuito avanza)
-        circuitoData = combinarNuevos(circuitoData, c, r => `${r.chasis}|${r.operacion}`);
+        circuitoData = unirBase('circuito', circuitoData, c);
         return { type: 'circuito', n: c.length };
     }
     if (type === 'pasos') {
         const p = processPasos(rows, nombreArchivo);
         if (p.length > 0) {
             // Se suman a lo que ya había (otro taller, otro período); si una orden ya estaba, queda la versión nueva
-            pasosData = combinarNuevos(pasosData, p, r => r.marca + '|' + r.orden);
+            pasosData = unirBase('pasos', pasosData, p);
             return { type: 'pasos', n: p.length };
         }
         return null;
@@ -245,7 +265,7 @@ function cargarEnAreaActual(rows, fields, nombreArchivo) {
         const s = processSurvey(rows);
         if (s.length > 0) {
             // Si una encuesta ya estaba (p. ej. pasó de pendiente a completada), queda la versión nueva
-            surveyData = combinarNuevos(surveyData, s, r => `${r.marca}|${r.orden}|${r.dominio || r.chasis}|${r.fechaStr}`);
+            surveyData = unirBase('encuestas', surveyData, s);
             return { type: 'encuestas', n: s.length };
         }
     } else {
@@ -253,8 +273,7 @@ function cargarEnAreaActual(rows, fields, nombreArchivo) {
         if (t.length > 0) {
             // Las órdenes del archivo nuevo reemplazan a las que ya estaban (el analista pudo recodificarlas);
             // las demás se conservan, así se acumulan los períodos
-            const nuevas = new Set(t.map(r => r.orden || `${r.cliente}|${r.fechaStr}`));
-            originalData = originalData.filter(r => !nuevas.has(r.orden || `${r.cliente}|${r.fechaStr}`)).concat(t);
+            originalData = unirBase('tipologias', originalData, t);
             return { type: 'tipologias', n: t.length };
         }
     }
@@ -312,8 +331,8 @@ async function handleFileUpload(e) {
     if (areas.length === 1 && areas[0] !== areaActual) cambiarArea(areas[0]);
     showMessage('✓ ' + parts.join(' · '));
     e.target.value = ''; // permite volver a subir el mismo archivo
-    // Si está conectado a Google Sheets, se guardan las bases que cambiaron
-    sheetsGuardar([...new Set(results.map(r => baseSheets(r.type, r.area)))]);
+    // Si está conectado a Google Sheets, se suman al historial guardado las bases que cambiaron
+    sheetsGuardarDespuesDeSubir([...new Set(results.map(r => baseSheets(r.type, r.area)))]);
 }
 
 // Ventas: el control de encuestas no trae el interno; se toma del circuito 0km por chasis (o por operación)
